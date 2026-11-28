@@ -653,22 +653,44 @@ end
 -- ---------------------------------------------------------------
 
 local logPosition = nil
-local tailBackfilled = false
+local backfillTarget = nil
+local tailFile = nil
 
 -- The log tail is ON by default: it is the only way to capture server-level
 -- problems (like "Loading of resource 'X' failed") that never fire
--- onDebugMessage. fileOpen only accepts paths relative to the server's
--- mods/deathmatch directory, so the default is "logs/server.log".
-local function logFilePath()
-  local path = tostring(CFG.logFile or "")
-  if path == "" then
-    path = "logs/server.log"
+-- onDebugMessage. fileOpen resolves relative paths against the resource's own
+-- folder, so the server log is found by trying candidates: the configured
+-- path (may be absolute), the server-root relative path, then the resource
+-- relative one. The first that opens wins; if none open the tail disables
+-- itself so MTA's fileOpen warnings cannot flood the log.
+local function resolveTailFile()
+  if tailFile ~= nil then
+    return tailFile ~= "" and tailFile or nil
   end
-  return path
-end
+  local candidates = {}
+  local cfgPath = tostring(CFG.logFile or "")
+  if cfgPath ~= "" and not string.find(cfgPath, "<", 1, true) then
+    candidates[#candidates + 1] = cfgPath
+  end
+  candidates[#candidates + 1] = "mods/deathmatch/logs/server.log"
+  candidates[#candidates + 1] = "logs/server.log"
+  local ok, setting = pcall(getServerConfigSetting, "logfile")
+  if ok and type(setting) == "string" and setting ~= "" and not string.find(setting, "<", 1, true) then
+    candidates[#candidates + 1] = setting
+  end
 
-local function isLogConfigured()
-  return not string.find(logFilePath(), "<", 1, true)
+  for _, path in ipairs(candidates) do
+    local file = fileOpen(path)
+    if file then
+      fileClose(file)
+      tailFile = path
+      log("server log tail enabled: " .. path)
+      return path
+    end
+  end
+  log("server log tail disabled: could not open a server log file (set logFile in shared/config.lua)")
+  tailFile = ""
+  return nil
 end
 
 -- Work out which resource a log line belongs to. Handles:
@@ -677,42 +699,59 @@ end
 --   "... for resource CFL_markersinv"             (resource problem)
 --   "Problem with resource: CFL_markersinv; ..."  (resource problem)
 --   "Loading of resource 'CFL_markersinv' failed" (resource problem)
+-- Resource names may contain hyphens (race-wuzimu, ctf-hydrastrike, ...).
 local function tailResourceOf(line)
   local _, resPath = string.match(line, "%[([^%]]*)%][/\\]([^/\\:%s]+)")
-  local resName = string.match(line, "^@([%w_]+)") or resPath
+  local resName = string.match(line, "^@([%w_%-]+)") or resPath
   if not resName then
-    resName = string.match(line, ": ([%w_]+)[/\\][^:]*:%d+:")
+    resName = string.match(line, ": ([%w_%-]+)[/\\][^:]*:%d+:")
   end
   if not resName then
-    resName = string.match(line, "for resource ([%w_]+)")
-      or string.match(line, "resource:? [\"']([%w_]+)")
+    resName = string.match(line, "for resource ([%w_%-]+)")
+      or string.match(line, "resource:? [\"']?([%w_%-]+)")
   end
   return resName or ""
 end
 
 local function tailLog()
-  if not STATE.enabled or not isLogConfigured() then return end
-  local file = fileOpen(logFilePath())
-  if not file then return end
+  if not STATE.enabled then return end
+  local path = resolveTailFile()
+  if not path then return end
+  local file = fileOpen(path)
+  if not file then
+    -- log rotated or moved: re-resolve the path on the next tick
+    tailFile = nil
+    return
+  end
 
   local size = fileGetSize(file)
   if not logPosition then
     -- First run: backfill the last 128 KB so already-failed resources show
     -- their recent errors too.
     logPosition = math.max(0, size - 131072)
+    backfillTarget = size
   end
   if size < logPosition then
     logPosition = 0
+    backfillTarget = size
   end
   if size == logPosition then
     fileClose(file)
     return
   end
 
+  -- During the startup backfill read the whole window (128 KB) in one go:
+  -- with the 64 KB read cap, errors sitting in the tail half of the window
+  -- were parsed on the SECOND tick, by which time backfill had already been
+  -- marked done and they were dropped.
+  local isBackfill = backfillTarget ~= nil and logPosition < backfillTarget
   fileSetPos(file, logPosition)
-  local chunk = fileRead(file, math.min(size - logPosition, 65536)) or ""
+  local chunk = fileRead(file, math.min(size - logPosition, isBackfill and 131072 or 65536)) or ""
   logPosition = fileGetPos(file)
   fileClose(file)
+  if backfillTarget and logPosition >= backfillTarget then
+    backfillTarget = nil
+  end
 
   local pushed = 0
   for line in string.gmatch(chunk, "[^\r\n]+") do
@@ -726,31 +765,34 @@ local function tailLog()
     end
     if level then
       local resName = tailResourceOf(line)
-      local isScriptError = string.find(line, ":%d+:%s") ~= nil and resName ~= ""
-        and string.find(low, "%.lua", 1, true) ~= nil
-      if isScriptError then
-        -- Script errors arrive live through onDebugMessage too — record the
-        -- counters from the backfill only, never double-post to the feed.
-        if not tailBackfilled and type(rpAdminRecordScriptIssue) == "function" then
-          rpAdminRecordScriptIssue(resName, level, string.sub(line, 1, 200))
-        end
-      elseif resName ~= "" then
-        -- Resource-load problems never fire onDebugMessage — the tail is the
-        -- only source. Feed them with the resource as the actor.
-        if type(rpAdminRecordScriptIssue) == "function" then
-          rpAdminRecordScriptIssue(resName, level, string.sub(line, 1, 200))
-        end
-        if type(rpAdminPushActivity) == "function" then
-          rpAdminPushActivity(level, resName, string.sub(line, 1, 300))
+      if resName == getResourceName(getThisResource()) then
+        -- our own fileOpen noise — ignore completely
+      else
+        local isScriptError = string.find(line, ":%d+:%s") ~= nil and resName ~= ""
+          and string.find(low, "%.lua", 1, true) ~= nil
+        if isScriptError then
+          -- Script errors arrive live through onDebugMessage too — record the
+          -- counters from the backfill only, never double-post to the feed.
+          if isBackfill and type(rpAdminRecordScriptIssue) == "function" then
+            rpAdminRecordScriptIssue(resName, level, string.sub(line, 1, 200))
+          end
+        elseif resName ~= "" then
+          -- Resource-load problems never fire onDebugMessage — the tail is the
+          -- only source. Counters always; the feed only for live lines.
+          if type(rpAdminRecordScriptIssue) == "function" then
+            rpAdminRecordScriptIssue(resName, level, string.sub(line, 1, 200))
+          end
+          if not isBackfill and type(rpAdminPushActivity) == "function" then
+            rpAdminPushActivity(level, resName, string.sub(line, 1, 300))
+            pushed = pushed + 1
+          end
+        elseif not isBackfill and type(rpAdminPushActivity) == "function" then
+          rpAdminPushActivity(level, "server", string.sub(line, 1, 300))
           pushed = pushed + 1
         end
-      else
-        rpAdminPushActivity(level, "server", string.sub(line, 1, 300))
-        pushed = pushed + 1
       end
     end
   end
-  tailBackfilled = true
 end
 
 -- ---------------------------------------------------------------
@@ -903,9 +945,6 @@ addEventHandler("onResourceStart", resourceRoot, function(started)
   setTimer(pushSnapshot, 1500, 1)
   setTimer(pushSnapshot, tonumber(CFG.snapshotInterval) or 20000, 0)
   setTimer(flushEvents, tonumber(CFG.eventFlushInterval) or 5000, 0)
-  if isLogConfigured() then
-    setTimer(tailLog, 1000, 1)
-    setTimer(tailLog, tonumber(CFG.logTailInterval) or 5000, 0)
-    log("server log tail enabled: " .. logFilePath() .. (tostring(CFG.logFile or "") == "" and " (default)" or ""))
-  end
+  setTimer(tailLog, 1000, 1)
+  setTimer(tailLog, tonumber(CFG.logTailInterval) or 5000, 0)
 end)

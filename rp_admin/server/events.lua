@@ -48,13 +48,14 @@ local function issueResourceFromFile(file)
   -- The file parameter arrives in several shapes depending on MTA build:
   --   "@resname/server/x.lua", "[category]/resname/server/x.lua",
   --   "resname\\Main\\x.lua" (plain path, resource = first segment).
+  -- Resource names may contain hyphens (race-wuzimu, ctf-hydrastrike, ...).
   if type(file) ~= "string" or file == "" then return "" end
-  local res = string.match(file, "^@([%w_]+)")
+  local res = string.match(file, "^@([%w_%-]+)")
   if res then return res end
-  res = string.match(file, "^%[[^%]]*%][/\\]([%w_]+)")
+  res = string.match(file, "^%[[^%]]*%][/\\]([%w_%-]+)")
   if res then return res end
   -- plain "<resname><sep><path>": resource name = first path segment
-  res = string.match(file, "^([%w_]+)[/\\].+")
+  res = string.match(file, "^([%w_%-]+)[/\\].+")
   if res then return res end
   return ""
 end
@@ -98,7 +99,7 @@ addEventHandler("onDebugMessage", root, function(message, level, file, line)
   -- in the message instead ("... for resource CFL_markersinv").
   local resName = issueResourceFromFile(file)
   if resName == "" then
-    resName = string.match(message, "for resource ([%w_]+)") or ""
+    resName = string.match(message, "for resource ([%w_%-]+)") or ""
   end
   if resName ~= "" and resName ~= getResourceName(getThisResource()) and type(rpAdminRecordScriptIssue) == "function" then
     rpAdminRecordScriptIssue(resName, kind, text)
