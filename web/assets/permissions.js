@@ -41,6 +41,12 @@ export const ACTION_PERMISSION = {
   acl_toggle_right: "acl.manage",
   acl_add_object: "acl.manage",
   acl_remove_object: "acl.manage",
+  acl_create_group: "acl.manage",
+  acl_destroy_group: "acl.manage",
+  acl_create_acl: "acl.manage",
+  acl_delete_acl: "acl.manage",
+  acl_group_add_acl: "acl.manage",
+  acl_group_remove_acl: "acl.manage",
   bodycam_start: "bodycam",
   bodycam_stop: "bodycam",
 };

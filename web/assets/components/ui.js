@@ -247,13 +247,48 @@ export function openModal(options) {
 
 export function confirmDialog(options) {
   return new Promise((resolve) => {
+    const needsType = typeof options.typeToConfirm === "string" && options.typeToConfirm.length > 0;
     openModal({
       title: options.title || "Are you sure?",
-      body: `<p class="confirm-text">${esc(options.message || "")}</p>`,
+      body: `<p class="confirm-text">${esc(options.message || "")}</p>${
+        needsType
+          ? `<label class="field mt-16"><span>Type <strong>${esc(options.typeToConfirm)}</strong> to confirm</span>
+             <input id="confirmTypeInput" autocomplete="off" spellcheck="false" />
+             <span class="hint">This action cannot be undone.</span></label>`
+          : ""
+      }`,
       actions: [
         { label: "Cancel", tone: "ghost", onClick: (close) => { close(); resolve(false); } },
-        { label: options.confirmLabel || "Confirm", tone: options.danger ? "danger" : "primary", onClick: (close) => { close(); resolve(true); } },
+        {
+          label: options.confirmLabel || "Confirm",
+          tone: options.danger ? "danger" : "primary",
+          onClick: (close) => {
+            if (needsType) {
+              const input = document.getElementById("confirmTypeInput");
+              if (!input || input.value.trim() !== options.typeToConfirm) return;
+            }
+            close();
+            resolve(true);
+          },
+        },
       ],
+      onMount(backdrop) {
+        if (!needsType) return;
+        const confirmBtn = backdrop.querySelector("[data-modal-action]:last-of-type") || Array.from(backdrop.querySelectorAll("[data-modal-action]")).pop();
+        const input = backdrop.querySelector("#confirmTypeInput");
+        const sync = () => {
+          if (confirmBtn) confirmBtn.disabled = !input || input.value.trim() !== options.typeToConfirm;
+        };
+        if (input && confirmBtn) {
+          sync();
+          input.addEventListener("input", sync);
+          input.addEventListener("keydown", (ev) => {
+            if (ev.key === "Enter" && input.value.trim() === options.typeToConfirm) {
+              close(); resolve(true);
+            }
+          });
+        }
+      },
       onClose: () => resolve(false),
     });
   });

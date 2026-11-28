@@ -40,10 +40,16 @@ const SECURITY_HEADERS = {
   "Content-Security-Policy": CSP,
 };
 
-function harden(response) {
+function harden(response, url) {
   const headers = new Headers(response.headers);
   for (const [name, value] of Object.entries(SECURITY_HEADERS)) {
     headers.set(name, value);
+  }
+  if (url) {
+    const pathname = url.pathname;
+    if (pathname === "/" || /\.(?:html|js|css)$/i.test(pathname)) {
+      headers.set("Cache-Control", "no-cache");
+    }
   }
   return new Response(response.body, { status: response.status, headers });
 }
@@ -53,12 +59,12 @@ export default {
     const url = new URL(request.url);
 
     if (url.pathname === "/api" || url.pathname.startsWith("/api/")) {
-      return harden(await handleApi(request, env, url));
+      return harden(await handleApi(request, env, url), url);
     }
 
     if (!env.ASSETS) {
-      return harden(new Response("Static assets binding is missing", { status: 500 }));
+      return harden(new Response("Static assets binding is missing", { status: 500 }), url);
     }
-    return harden(await env.ASSETS.fetch(request));
+    return harden(await env.ASSETS.fetch(request), url);
   },
 };

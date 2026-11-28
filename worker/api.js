@@ -45,6 +45,45 @@ function bearer(request) {
   return header.toLowerCase().startsWith("bearer ") ? header.slice(7) : "";
 }
 
+function readCookie(request, name) {
+  const cookie = request.headers.get("Cookie") || "";
+  for (const part of cookie.split(";")) {
+    const index = part.indexOf("=");
+    if (index === -1) continue;
+    const key = part.slice(0, index).trim();
+    if (key === name) return part.slice(index + 1).trim();
+  }
+  return "";
+}
+
+function base64urlEncode(text) {
+  const bytes = new TextEncoder().encode(text);
+  let binary = "";
+  bytes.forEach((b) => {
+    binary += String.fromCharCode(b);
+  });
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+}
+
+function base64urlDecode(value) {
+  let normalized = value.replace(/-/g, "+").replace(/_/g, "/");
+  normalized += "=".repeat((4 - (normalized.length % 4)) % 4);
+  const binary = atob(normalized);
+  const bytes = Uint8Array.from(binary, (c) => c.charCodeAt(0));
+  return new TextDecoder().decode(bytes);
+}
+
+function secureSuffix(url) {
+  return url.protocol === "https:" ? "; Secure" : "";
+}
+
+function redirectTo(url, target, headers) {
+  return new Response(null, {
+    status: 302,
+    headers: { Location: target, "Cache-Control": NO_STORE, ...(headers || {}) },
+  });
+}
+
 // Per-isolate best-effort limiter. Add Cloudflare WAF rate limiting for a
 // global guarantee.
 const buckets = new Map();
@@ -90,7 +129,9 @@ export async function handleApi(request, env, url) {
     return fail("Too many requests — try again shortly", 429);
   }
 
-  const maxBody = path.startsWith("/rest/") ? 131072 : 32768;
+  // /rest must accept the full connector snapshot (all resources + the whole
+  // ACL tree) — 512 KB.
+  const maxBody = path.startsWith("/rest/") ? 524288 : 32768;
   if (payloadTooLarge(request, maxBody)) {
     return fail("Payload too large", 413);
   }
@@ -179,6 +220,106 @@ export async function handleApi(request, env, url) {
     });
     return passthrough(res);
   }
+  // Google OAuth (server-side authorization code flow). No JavaScript origin
+  // or Supabase URL is exposed to the browser.
+  if (path === "/auth/google/start" && method === "GET") {
+    if (!env.GOOGLE_CLIENT_ID || !env.GOOGLE_CLIENT_SECRET) {
+      return redirectTo(
+        url,
+        `${url.origin}/login?error=${encodeURIComponent("Google sign-in is not configured on the server")}`
+      );
+    }
+    const state = crypto.randomUUID();
+    const authorize = new URL("https://accounts.google.com/o/oauth2/v2/auth");
+    authorize.searchParams.set("client_id", env.GOOGLE_CLIENT_ID);
+    authorize.searchParams.set("redirect_uri", `${url.origin}/api/auth/google/callback`);
+    authorize.searchParams.set("response_type", "code");
+    authorize.searchParams.set("scope", "openid email profile");
+    authorize.searchParams.set("state", state);
+    authorize.searchParams.set("prompt", "select_account");
+
+    return redirectTo(url, authorize.toString(), {
+      "Set-Cookie": `rp_oauth_state=${state}; HttpOnly; SameSite=Lax; Path=/api/auth/google; Max-Age=600${secureSuffix(url)}`,
+    });
+  }
+
+  if (path === "/auth/google/callback" && method === "GET") {
+    const code = url.searchParams.get("code");
+    const state = url.searchParams.get("state");
+    const cookieState = readCookie(request, "rp_oauth_state");
+
+    if (!code || !state || !cookieState || state !== cookieState) {
+      return redirectTo(
+        url,
+        `${url.origin}/login?error=${encodeURIComponent("Google state check failed — try again")}`
+      );
+    }
+
+    const redirectUri = `${url.origin}/api/auth/google/callback`;
+    const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        code,
+        client_id: env.GOOGLE_CLIENT_ID,
+        client_secret: env.GOOGLE_CLIENT_SECRET,
+        redirect_uri: redirectUri,
+        grant_type: "authorization_code",
+      }),
+    });
+    const token = await tokenRes.json().catch(() => null);
+    if (!tokenRes.ok || !token || !token.id_token) {
+      return redirectTo(
+        url,
+        `${url.origin}/login?error=${encodeURIComponent("Google token exchange failed")}`
+      );
+    }
+
+    const sbRes = await fetch(`${env.SUPABASE_URL}/auth/v1/token?grant_type=id_token`, {
+      method: "POST",
+      headers: sbHeaders(env, null, { "Content-Type": "application/json" }),
+      body: JSON.stringify({ provider: "google", id_token: token.id_token }),
+    });
+    const session = await sbRes.json().catch(() => null);
+    if (!sbRes.ok || !session || !session.access_token) {
+      return redirectTo(
+        url,
+        `${url.origin}/login?error=${encodeURIComponent("Supabase rejected the Google token")}`
+      );
+    }
+
+    const payload = base64urlEncode(
+      JSON.stringify({
+        access_token: session.access_token,
+        refresh_token: session.refresh_token,
+        expires_in: session.expires_in,
+        user: session.user,
+      })
+    );
+
+    return redirectTo(url, `${url.origin}/auth/callback`, {
+      "Set-Cookie": `rp_oauth_session=${payload}; HttpOnly; SameSite=Lax; Path=/api/auth; Max-Age=120${secureSuffix(url)}`,
+    });
+  }
+
+  if (path === "/auth/oauth/claim" && method === "POST") {
+    const raw = readCookie(request, "rp_oauth_session");
+    if (!raw) return fail("No pending Google session", 401);
+    let data;
+    try {
+      data = JSON.parse(base64urlDecode(raw));
+    } catch {
+      return fail("Invalid Google session", 401);
+    }
+    return new Response(JSON.stringify(data), {
+      status: 200,
+      headers: {
+        "Content-Type": "application/json",
+        "Cache-Control": NO_STORE,
+        "Set-Cookie": `rp_oauth_session=; HttpOnly; SameSite=Lax; Path=/api/auth; Max-Age=0${secureSuffix(url)}`,
+      },
+    });
+  }
 
   if (path.startsWith("/rest/")) {
     const restPath = path.slice("/rest".length);
@@ -206,7 +347,7 @@ export async function handleApi(request, env, url) {
     const init = { method, headers };
     if (method !== "GET" && method !== "HEAD") {
       const body = await request.text();
-      if (body.length > 131072) return fail("Payload too large", 413);
+      if (body.length > 524288) return fail("Payload too large", 413);
       init.body = body && body.trim() ? body : "{}";
     }
 

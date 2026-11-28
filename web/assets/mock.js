@@ -176,29 +176,75 @@ const commandsByServer = {
   2: [],
 };
 
+const rpAdminRights = [
+  { name: "function.aclGetGroup", access: true },
+  { name: "function.aclList", access: true },
+  { name: "function.aclGroupListObjects", access: true },
+  { name: "function.aclGroupListACL", access: true },
+  { name: "function.aclListRights", access: true },
+  { name: "function.aclGetRight", access: true },
+  { name: "function.aclSetRight", access: true },
+  { name: "function.aclGroupAddObject", access: true },
+  { name: "function.aclGroupRemoveObject", access: true },
+  { name: "function.banPlayer", access: true },
+  { name: "function.kickPlayer", access: true },
+  { name: "function.refreshResources", access: true },
+  { name: "function.setServerName", access: true },
+  { name: "function.shutdown", access: true },
+  { name: "function.startResource", access: true },
+  { name: "function.stopResource", access: true },
+  { name: "function.restartResource", access: true },
+];
+
 const aclByServer = {
   1: {
+    active: "RpAdmin",
+    groups: [
+      { name: "Admin", objects: ["resource.admin", "user.royalputo"], acls: ["Admin", "Default"] },
+      { name: "Moderator", objects: ["user.darkwolf"], acls: ["Moderator"] },
+      { name: "RpAdmin", objects: ["resource.rp_admin", "user.royalputo"], acls: ["RpAdmin"] },
+      { name: "SuperModerator", objects: ["user.layla"], acls: ["SuperModerator", "Default"] },
+    ],
+    acls: [
+      { name: "Default", rights: [{ name: "general.ModifyOtherObjects", access: false }] },
+      { name: "Admin", rights: [{ name: "command.ban", access: true }, { name: "command.kick", access: true }, { name: "function.kickPlayer", access: true }] },
+      { name: "Moderator", rights: [{ name: "command.mute", access: true }] },
+      { name: "RpAdmin", rights: rpAdminRights },
+      { name: "SuperModerator", rights: [{ name: "command.ban", access: true }] },
+    ],
+    // legacy fields
     group: "RpAdmin",
     acl: "RpAdmin",
     objects: ["resource.rp_admin", "user.royalputo"],
-    acls: ["RpAdmin"],
-    rights: [
-      { name: "function.kickPlayer", access: true },
-      { name: "function.banPlayer", access: true },
-      { name: "function.startResource", access: true },
-      { name: "function.stopResource", access: true },
-      { name: "function.restartResource", access: true },
-      { name: "function.setServerName", access: true },
-      { name: "function.shutdown", access: true },
-    ],
+    rights: rpAdminRights,
   },
-  2: { group: "RpAdmin", acl: "RpAdmin", objects: ["resource.rp_admin"], acls: ["RpAdmin"], rights: [] },
+  2: {
+    active: "RpAdmin",
+    groups: [{ name: "RpAdmin", objects: ["resource.rp_admin"], acls: ["RpAdmin"] }],
+    acls: [{ name: "RpAdmin", rights: [] }],
+    group: "RpAdmin",
+    acl: "RpAdmin",
+    objects: ["resource.rp_admin"],
+    rights: [],
+  },
 };
 
 const serverKey = (shortId) => `rsk_${String(shortId).padStart(2, "0")}${Math.random().toString(16).slice(2, 14)}${Math.random().toString(16).slice(2, 14)}`;
 
 const delay = (value, ms) => new Promise((resolve) => setTimeout(() => resolve(value), ms == null ? 140 : ms));
 const clone = (value) => JSON.parse(JSON.stringify(value));
+
+function mockAclSkeleton() {
+  return {
+    active: "RpAdmin",
+    groups: [{ name: "RpAdmin", objects: ["resource.rp_admin"], acls: ["RpAdmin"] }],
+    acls: [{ name: "RpAdmin", rights: [] }],
+    group: "RpAdmin",
+    acl: "RpAdmin",
+    objects: ["resource.rp_admin"],
+    rights: [],
+  };
+}
 
 let nextId = 900;
 const pushActivity = (shortId, kind, actor, text) => {
@@ -438,40 +484,122 @@ export const mockApi = {
       case "acl_toggle_right": {
         if (roleFor(shortId) !== "owner") return delay({ ok: false, error: "Owner only" });
         const right = String(args.right || "");
+        const aclName = String(args.acl || "RpAdmin");
         if (!/^(function|general|command|resource)\.[A-Za-z0-9_.-]+$/.test(right)) {
           return delay({ ok: false, error: "Invalid right name" });
         }
-        const acl = aclByServer[shortId] || (aclByServer[shortId] = { group: "RpAdmin", acl: "RpAdmin", objects: [], acls: ["RpAdmin"], rights: [] });
-        let entry = acl.rights.find((r) => r.name === right);
+        const acl = aclByServer[shortId] || (aclByServer[shortId] = mockAclSkeleton());
+        let entry = (acl.acls || []).find((a) => a.name === aclName);
         if (!entry) {
-          entry = { name: right, access: false };
-          acl.rights.push(entry);
-          acl.rights.sort((a, b) => a.name.localeCompare(b.name));
+          entry = { name: aclName, rights: [] };
+          acl.acls.push(entry);
+          acl.acls.sort((a, b) => a.name.localeCompare(b.name));
         }
-        entry.access = args.enabled === true;
-        pushActivity(shortId, "staff", actor, `${actor} ${entry.access ? "enabled" : "disabled"} ACL right ${right}`);
-        return delay({ ok: true, message: `${entry.access ? "Enabled" : "Disabled"} ${right}` });
+        let rightEntry = entry.rights.find((r) => r.name === right);
+        if (!rightEntry) {
+          rightEntry = { name: right, access: false };
+          entry.rights.push(rightEntry);
+          entry.rights.sort((a, b) => a.name.localeCompare(b.name));
+        }
+        rightEntry.access = args.enabled === true;
+        pushActivity(shortId, "staff", actor, `${actor} ${rightEntry.access ? "enabled" : "disabled"} ACL right ${right} on ${aclName}`);
+        return delay({ ok: true, message: `${rightEntry.access ? "Enabled" : "Disabled"} ${right}` });
       }
       case "acl_add_object": {
         if (roleFor(shortId) !== "owner") return delay({ ok: false, error: "Owner only" });
         const object = String(args.object || "");
+        const groupName = String(args.group || "RpAdmin");
         if (!/^(user|resource|map|group)\.[A-Za-z0-9_.-]+$/.test(object)) {
           return delay({ ok: false, error: "Invalid ACL object" });
         }
-        const acl = aclByServer[shortId] || (aclByServer[shortId] = { group: "RpAdmin", acl: "RpAdmin", objects: [], acls: ["RpAdmin"], rights: [] });
-        if (!acl.objects.includes(object)) acl.objects.push(object);
-        acl.objects.sort();
-        pushActivity(shortId, "staff", actor, `${actor} added ${object} to the RpAdmin ACL group`);
-        return delay({ ok: true, message: `Added ${object}` });
+        const acl = aclByServer[shortId] || (aclByServer[shortId] = mockAclSkeleton());
+        let group = acl.groups.find((g) => g.name === groupName);
+        if (!group) {
+          group = { name: groupName, objects: [], acls: [] };
+          acl.groups.push(group);
+          acl.groups.sort((a, b) => a.name.localeCompare(b.name));
+        }
+        if (!group.objects.includes(object)) group.objects.push(object);
+        group.objects.sort();
+        pushActivity(shortId, "staff", actor, `${actor} added ${object} to ACL group ${groupName}`);
+        return delay({ ok: true, message: `Added ${object} to ${groupName}` });
       }
       case "acl_remove_object": {
         if (roleFor(shortId) !== "owner") return delay({ ok: false, error: "Owner only" });
         const object = String(args.object || "");
+        const groupName = String(args.group || "RpAdmin");
         const acl = aclByServer[shortId];
-        if (!acl || !acl.objects.includes(object)) return delay({ ok: false, error: "Object not found" });
-        acl.objects = acl.objects.filter((entry) => entry !== object);
-        pushActivity(shortId, "staff", actor, `${actor} removed ${object} from the RpAdmin ACL group`);
+        const group = acl && acl.groups.find((g) => g.name === groupName);
+        if (!group || !group.objects.includes(object)) return delay({ ok: false, error: "Object not found" });
+        group.objects = group.objects.filter((entry) => entry !== object);
+        pushActivity(shortId, "staff", actor, `${actor} removed ${object} from ACL group ${groupName}`);
         return delay({ ok: true, message: `Removed ${object}` });
+      }
+      case "acl_create_group": {
+        if (roleFor(shortId) !== "owner") return delay({ ok: false, error: "Owner only" });
+        const groupName = String(args.group || "");
+        if (!/^[A-Za-z0-9_][A-Za-z0-9_.-]*$/.test(groupName)) return delay({ ok: false, error: "Invalid group name" });
+        const acl = aclByServer[shortId] || (aclByServer[shortId] = mockAclSkeleton());
+        if (acl.groups.some((g) => g.name === groupName)) return delay({ ok: false, error: "Group already exists" });
+        acl.groups.push({ name: groupName, objects: [], acls: [] });
+        acl.groups.sort((a, b) => a.name.localeCompare(b.name));
+        pushActivity(shortId, "staff", actor, `${actor} created ACL group ${groupName}`);
+        return delay({ ok: true, message: `Created group ${groupName}` });
+      }
+      case "acl_destroy_group": {
+        if (roleFor(shortId) !== "owner") return delay({ ok: false, error: "Owner only" });
+        const groupName = String(args.group || "");
+        const acl = aclByServer[shortId];
+        if (!acl || !acl.groups.some((g) => g.name === groupName)) return delay({ ok: false, error: "Group not found" });
+        if (["Admin", "Console"].includes(groupName)) return delay({ ok: false, error: "This group is protected" });
+        acl.groups = acl.groups.filter((g) => g.name !== groupName);
+        pushActivity(shortId, "staff", actor, `${actor} deleted ACL group ${groupName}`);
+        return delay({ ok: true, message: `Deleted group ${groupName}` });
+      }
+      case "acl_create_acl": {
+        if (roleFor(shortId) !== "owner") return delay({ ok: false, error: "Owner only" });
+        const aclName = String(args.acl || "");
+        if (!/^[A-Za-z0-9_][A-Za-z0-9_.-]*$/.test(aclName)) return delay({ ok: false, error: "Invalid ACL name" });
+        const acl = aclByServer[shortId] || (aclByServer[shortId] = mockAclSkeleton());
+        if (acl.acls.some((a) => a.name === aclName)) return delay({ ok: false, error: "ACL already exists" });
+        acl.acls.push({ name: aclName, rights: [] });
+        acl.acls.sort((a, b) => a.name.localeCompare(b.name));
+        pushActivity(shortId, "staff", actor, `${actor} created ACL ${aclName}`);
+        return delay({ ok: true, message: `Created ACL ${aclName}` });
+      }
+      case "acl_delete_acl": {
+        if (roleFor(shortId) !== "owner") return delay({ ok: false, error: "Owner only" });
+        const aclName = String(args.acl || "");
+        const acl = aclByServer[shortId];
+        if (!acl || !acl.acls.some((a) => a.name === aclName)) return delay({ ok: false, error: "ACL not found" });
+        if (["Default", "RpAdmin"].includes(aclName)) return delay({ ok: false, error: "This ACL is protected" });
+        acl.acls = acl.acls.filter((a) => a.name !== aclName);
+        acl.groups.forEach((g) => { g.acls = g.acls.filter((name) => name !== aclName); });
+        pushActivity(shortId, "staff", actor, `${actor} deleted ACL ${aclName}`);
+        return delay({ ok: true, message: `Deleted ACL ${aclName}` });
+      }
+      case "acl_group_add_acl": {
+        if (roleFor(shortId) !== "owner") return delay({ ok: false, error: "Owner only" });
+        const aclName = String(args.acl || "");
+        const groupName = String(args.group || "RpAdmin");
+        const acl = aclByServer[shortId];
+        const group = acl && acl.groups.find((g) => g.name === groupName);
+        if (!group) return delay({ ok: false, error: "Group not found" });
+        if (!acl.acls.some((a) => a.name === aclName)) return delay({ ok: false, error: "ACL not found" });
+        if (!group.acls.includes(aclName)) group.acls.push(aclName);
+        pushActivity(shortId, "staff", actor, `${actor} attached ACL ${aclName} to group ${groupName}`);
+        return delay({ ok: true, message: `Attached ${aclName} to ${groupName}` });
+      }
+      case "acl_group_remove_acl": {
+        if (roleFor(shortId) !== "owner") return delay({ ok: false, error: "Owner only" });
+        const aclName = String(args.acl || "");
+        const groupName = String(args.group || "RpAdmin");
+        const acl = aclByServer[shortId];
+        const group = acl && acl.groups.find((g) => g.name === groupName);
+        if (!group || !group.acls.includes(aclName)) return delay({ ok: false, error: "ACL is not attached to this group" });
+        group.acls = group.acls.filter((name) => name !== aclName);
+        pushActivity(shortId, "staff", actor, `${actor} detached ACL ${aclName} from group ${groupName}`);
+        return delay({ ok: true, message: `Detached ${aclName} from ${groupName}` });
       }
       case "bodycam_start": {
         const player = findPlayer(shortId, args.player);
@@ -550,7 +678,7 @@ export const mockApi = {
     bansByServer[shortId] = [];
     warningsByServer[shortId] = [];
     invitesByServer[shortId] = [];
-    aclByServer[shortId] = { group: "RpAdmin", acl: "RpAdmin", objects: ["resource.rp_admin"], acls: ["RpAdmin"], rights: [] };
+    aclByServer[shortId] = mockAclSkeleton();
     notesByServer[shortId] = [];
     activityByServer[shortId] = [];
     commandsByServer[shortId] = [];

@@ -3,7 +3,7 @@ import { getData } from "./data.js";
 import { esc, spinner, toast } from "./components/ui.js";
 import { initEffects, pageTransition } from "./effects.js";
 
-const root = document.getElementById("app");
+let root = document.getElementById("app");
 let data = null;
 let session = null;
 let cleanup = null;
@@ -94,6 +94,12 @@ async function renderRoute() {
     return;
   }
 
+  // Fresh mount node per render: cloneNode(false) drops all listeners that a
+  // previous view bound on the root (the old code accumulated handlers on
+  // every navigation and re-render).
+  const fresh = root.cloneNode(false);
+  root.replaceWith(fresh);
+  root = fresh;
   root.innerHTML = `<div class="view">${spinner()}</div>`;
 
   const ctx = {

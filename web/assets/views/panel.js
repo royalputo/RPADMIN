@@ -213,10 +213,16 @@ export async function view(ctx) {
       }
       tabCleanup = null;
     }
+    // Swap in a fresh container: cloneNode(false) keeps the id/attrs but drops
+    // every listener the previous render bound on it. Reusing the same node
+    // used to accumulate handlers on every re-render (the tabs poll every few
+    // seconds), so one click fired dozens of actions.
+    const fresh = container.cloneNode(false);
+    container.replaceWith(fresh);
     tabModule = await LOADERS[activeTab]();
     tabResult = await tabModule.tab(tabCtx());
-    container.innerHTML = tabResult.html;
-    if (tabResult.onMount) tabResult.onMount(container, tabCtx());
+    fresh.innerHTML = tabResult.html;
+    if (tabResult.onMount) tabResult.onMount(fresh, tabCtx());
   }
 
   const shellHtml = `<div class="app">

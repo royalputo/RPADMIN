@@ -1,0 +1,18 @@
+# RpAdmin — Dev By Royalputo
+node_modules/
+.DS_Store
+Thumbs.db
+
+# MTA connector secrets
+rp_admin/shared/config.lua
+!rp_admin/shared/config.lua.example
+
+# Local Supabase state
+supabase/.temp/
+supabase/.branches/
+.env
+.env.*
+
+# Local notes / credentials
+web secret.txt
+*.log

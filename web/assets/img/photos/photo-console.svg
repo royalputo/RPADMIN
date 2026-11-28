@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 260">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1a1f2e"/><stop offset="1" stop-color="#0e1017"/>
+    </linearGradient>
+  </defs>
+  <rect width="400" height="260" rx="16" fill="url(#bg)"/>
+  <rect x="0.5" y="0.5" width="399" height="259" rx="16" fill="none" stroke="#2b3245"/>
+  <circle cx="18" cy="18" r="4.5" fill="#ef4444"/><circle cx="32" cy="18" r="4.5" fill="#f59e0b"/><circle cx="46" cy="18" r="4.5" fill="#23c55e"/>
+  <text x="384" y="22" text-anchor="end" font-family="Segoe UI, Arial" font-size="10" font-weight="700" fill="#8b93a7">RpAdmin · Console</text>
+  <rect x="14" y="34" width="372" height="212" rx="10" fill="#0a0c12"/>
+  <text x="30" y="60" font-family="Consolas, monospace" font-size="10" fill="#cdd9ff">> say Restart in 10 minutes!</text>
+  <text x="30" y="82" font-family="Consolas, monospace" font-size="10" fill="#6ee7a0">✔ command queued · done #482</text>
+  <text x="30" y="104" font-family="Consolas, monospace" font-size="10" fill="#cdd9ff">> resource restart freeroam</text>
+  <text x="30" y="126" font-family="Consolas, monospace" font-size="10" fill="#6ee7a0">✔ freeroam restarted (2.1s)</text>
+  <text x="30" y="148" font-family="Consolas, monospace" font-size="10" fill="#cdd9ff">> start vehicle-shop</text>
+  <text x="30" y="170" font-family="Consolas, monospace" font-size="10" fill="#ff9a9a">✘ startResource failed (check ACL)</text>
+  <text x="30" y="192" font-family="Consolas, monospace" font-size="10" fill="#8b93a7">[RpAdmin] snapshot pushed (200)</text>
+  <text x="30" y="214" font-family="Consolas, monospace" font-size="10" fill="#8b93a7">[RpAdmin] connector online · v4</text>
+  <rect x="26" y="226" width="348" height="10" rx="5" fill="#141824"/>
+  <text x="32" y="234" font-family="Consolas, monospace" font-size="9" fill="#7aa2ff">> _</text>
+</svg>

@@ -21,7 +21,7 @@ function serverCard(server) {
     <div class="row between">
       <div class="tag-list">${roleBadge(server.role)}<span class="badge off">${esc(server.gamemode || "-")}</span></div>
       <div class="row" style="gap:8px">
-        ${server.role === "owner" ? `<button class="btn sm danger" data-delete-server="${server.shortId}" data-name="${esc(server.name)}">Delete</button>` : ""}
+        ${server.role === "owner" ? `<button class="btn sm danger" data-delete-server="${server.shortId}" data-name="${esc(server.name)}" title="Remove from the panel only — the real MTA server keeps running">Remove</button>` : ""}
         <a class="btn sm primary" href="/${server.shortId}" data-link>Open panel</a>
       </div>
     </div>
@@ -137,15 +137,20 @@ export async function view(ctx) {
         const btn = ev.target.closest("[data-delete-server]");
         if (!btn) return;
         const ok = await confirmDialog({
-          title: "Delete server?",
-          message: `"${btn.dataset.name}" and all of its panel data (players, bans, commands, activity, staff, invites) will be permanently deleted. The connector will stop working.`,
-          confirmLabel: "Delete server",
+          title: "Remove server from panel?",
+          message:
+            `"${btn.dataset.name}" will be removed from your RpAdmin panel together with its panel data ` +
+            "(members, invites, warnings, activity). " +
+            "Your real MTA server is NOT touched — it keeps running, no resources are stopped and no files are deleted. " +
+            "The connector on the game server will simply stop reporting until you set up a new server here.",
+          confirmLabel: "Remove from panel",
           danger: true,
+          typeToConfirm: btn.dataset.name,
         });
         if (!ok) return;
         const result = await ctx.data.deleteServer(btn.dataset.deleteServer);
         if (result && result.ok) {
-          ctx.toast("Server deleted", "ok");
+          ctx.toast("Server removed from the panel (game server untouched)", "ok");
           ctx.refresh();
         } else {
           ctx.toast((result && result.error) || "Could not delete server", "err");
