@@ -38,32 +38,43 @@ addEventHandler("onResourceStop", root, function(stopped)
   push("resource", "server", "Resource '" .. getResourceName(stopped) .. "' stopped")
 end)
 
--- Script errors and warnings (including deprecation warnings) are forwarded
--- without needing logFile access. MTA passes:
--- (message, level, fileId, filename, line, scriptResource) — message FIRST.
--- The old code read (level, message, ...) so the kind check never matched and
--- errors were silently dropped.
-addEventHandler("onDebugMessage", root, function(message, level, fileId, filename, line, scriptResource)
+-- Script errors and warnings are forwarded without needing logFile access.
+-- Server event signature (MTA wiki):
+--   onDebugMessage(string message, int level, string file, int line, int r, int g, int b)
+-- level: 0 custom, 1 error, 2 warning, 3 info. The old handler read
+-- (level, message, ...) and compared level to "error"/"warning" strings, so
+-- nothing was ever captured.
+local function issueResourceFromFile(file)
+  -- Script errors carry a path like "@resname/server/x.lua" or
+  -- "[category]/resname/server/x.lua" — pull the resource name out of it.
+  if type(file) ~= "string" or file == "" then return "" end
+  local res = string.match(file, "^@([%w_]+)")
+  if res then return res end
+  res = string.match(file, "^%[[^%]]*%][/\\]([%w_]+)")
+  if res then return res end
+  return ""
+end
+
+addEventHandler("onDebugMessage", root, function(message, level, file, line)
   if type(message) ~= "string" then return end
   local kind = nil
-  if level == "error" then
+  local lvl = tonumber(level)
+  if lvl == 1 or level == "error" then
     kind = "error"
-  elseif level == "warning" then
+  elseif lvl == 2 or level == "warning" then
     kind = "warn"
   end
   if not kind then return end
 
   local text = message
-  if filename and filename ~= "" then
-    text = text .. " (" .. tostring(filename) .. ":" .. tostring(line or 0) .. ")"
+  if type(file) == "string" and file ~= "" then
+    text = text .. " (" .. file .. ":" .. tostring(line or 0) .. ")"
   end
 
-  -- Remember which script produced it so the Resources tab can highlight it.
-  local resName = ""
-  if isElement(scriptResource) and scriptResource ~= getThisResource() then
-    resName = tostring(getResourceName(scriptResource) or "")
-  end
-  if resName ~= "" and type(rpAdminRecordScriptIssue) == "function" then
+  -- Attribute the message to the script it came from, so the panel can
+  -- highlight that resource.
+  local resName = issueResourceFromFile(file)
+  if resName ~= "" and resName ~= getResourceName(getThisResource()) and type(rpAdminRecordScriptIssue) == "function" then
     rpAdminRecordScriptIssue(resName, kind, text)
   end
 

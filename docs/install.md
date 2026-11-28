@@ -196,11 +196,15 @@ RP_ADMIN = {
 }
 ```
 
-`logFile` is optional but recommended: set it to the absolute MTA server log
-path so ERROR/WARNING lines show up in **Script health** and **Activity**:
+`logFile` is optional: point it at the server log (relative to the
+`mods/deathmatch` folder — **absolute paths do not work**, MTA blocks them) so
+extra server-level ERROR/WARNING lines show up in **Activity**:
 
-- Windows: `D:/MTA/server/mods/deathmatch/logs/server.log`
-- Linux: `/home/mta/server/mods/deathmatch/logs/server.log`
+- Windows: `logs/server.log`
+- Linux: `logs/server.log`
+
+Script errors/warnings themselves are captured automatically through
+`onDebugMessage` — `logFile` only adds extra server-level lines.
 
 Only new lines written after the resource starts are forwarded.
 

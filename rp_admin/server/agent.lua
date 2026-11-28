@@ -24,7 +24,7 @@ local STATE = {
   active = false,
   lastProgressAt = 0,
   diag = {
-    version = "agent v4",
+    version = "agent v5",
     serverUuid = CFG.serverUuid,
     pollStatus = 0,
     pollCount = 0,
@@ -653,6 +653,7 @@ end
 -- ---------------------------------------------------------------
 
 local logPosition = nil
+local tailBackfilled = false
 
 local function isLogConfigured()
   return type(CFG.logFile) == "string"
@@ -696,10 +697,22 @@ local function tailLog()
       level = "warn"
     end
     if level then
-      rpAdminPushActivity(level, "server", string.sub(line, 1, 300))
-      pushed = pushed + 1
+      -- Script-error lines carry a [category]/resname or @resname path and
+      -- already arrive live through onDebugMessage. Record them as per-resource
+      -- counters from the backfill only, and never double-post to the feed.
+      local _, resFromPath = string.match(line, "%[([^%]]*)%][/\\]([^/\\:%s]+)")
+      local resName = string.match(line, "^@([%w_]+)") or resFromPath
+      if resName then
+        if not tailBackfilled and type(rpAdminRecordScriptIssue) == "function" then
+          rpAdminRecordScriptIssue(resName, level, string.sub(line, 1, 200))
+        end
+      else
+        rpAdminPushActivity(level, "server", string.sub(line, 1, 300))
+        pushed = pushed + 1
+      end
     end
   end
+  tailBackfilled = true
 end
 
 -- ---------------------------------------------------------------
@@ -846,7 +859,7 @@ addEventHandler("onResourceStart", resourceRoot, function(started)
   STATE.enabled = true
   STATE.active = false
   STATE.lastProgressAt = getRealTime().timestamp
-  log("connector started (agent v4) for server " .. tostring(CFG.serverId) .. " [" .. tostring(CFG.serverUuid) .. "] — polling " .. BASE .. " every " .. tostring(CFG.pollInterval or 3000) .. "ms")
+  log("connector started (agent v5) for server " .. tostring(CFG.serverId) .. " [" .. tostring(CFG.serverUuid) .. "] — polling " .. BASE .. " every " .. tostring(CFG.pollInterval or 3000) .. "ms")
   schedulePoll(500)
   setTimer(pollWatchdog, 10000, 0)
   setTimer(pushSnapshot, 1500, 1)
