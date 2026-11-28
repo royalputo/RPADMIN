@@ -47,6 +47,16 @@ export async function tab(ctx) {
     <span class="log-text">${i.actor && i.actor !== "server" ? `<span class="mono">${esc(i.actor)}</span> \u2014 ` : ""}${esc(i.text)}</span>
   </div>`;
 
+  const agentVersion = (ctx.snapshot.diag || {}).version || "";
+  const versionOk = /v5/.test(agentVersion);
+  const versionBanner = ctx.snapshot.server && ctx.snapshot.server.online && !versionOk
+    ? `<div class="banner warn mt-16" style="margin-top:16px"><div>
+        <strong>Script error capture needs connector agent v5.</strong>
+        Your server reports <span class="mono">${esc(agentVersion || "unknown version")}</span>.
+        Download the latest <span class="mono">rp_admin.zip</span> from Settings, replace the resource and restart your MTA server \u2014 until then errors cannot be captured.
+      </div></div>`
+    : "";
+
   return {
     title: "Script Errors",
     html: `<div class="page-head">
@@ -57,6 +67,7 @@ export async function tab(ctx) {
         </div>
       </div>
 
+      ${versionBanner}
       ${entries.length
         ? `<div class="grid cols-2">${entries.map(issueCard).join("")}</div>`
         : `<div class="card mt-16">${emptyState(
