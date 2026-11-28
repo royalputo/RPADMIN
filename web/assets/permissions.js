@@ -1,11 +1,13 @@
 const MODERATOR = ["read", "warn", "note", "mute", "freeze", "kick"];
-const ADMIN = [...MODERATOR, "say", "ban", "unban", "resource.restart", "bodycam"];
+const ADMIN = [
+  ...MODERATOR,
+  "say", "ban", "unban",
+  "resource.restart", "resource.start", "resource.stop",
+  "server.settings", "server.shutdown",
+  "bodycam",
+];
 const OWNER = [
   ...ADMIN,
-  "resource.start",
-  "resource.stop",
-  "server.settings",
-  "server.shutdown",
   "staff.manage",
   "key.rotate",
   "acl.manage",

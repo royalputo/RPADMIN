@@ -88,7 +88,7 @@ export async function tab(ctx) {
     : "";
 
   const note = !canRestart
-    ? `<div class="banner mt-16"><div>Your role can view resources but cannot control them. Restart requires Admin, start/stop requires Owner.</div></div>`
+    ? `<div class="banner mt-16"><div>Your role can view resources but cannot control them. Resource start/stop/restart requires Admin or Owner.</div></div>`
     : "";
 
   return {

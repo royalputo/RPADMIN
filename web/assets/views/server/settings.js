@@ -39,12 +39,14 @@ function toggleState(key) {
 export async function tab(ctx) {
   const server = ctx.snapshot.server;
   const isOwner = can(ctx.role, "key.rotate");
+  const canSettings = can(ctx.role, "server.settings");
+  const canShutdown = can(ctx.role, "server.shutdown");
   const panelUrl = `${CONFIG.PANEL_URL}/${server.shortId}`;
 
   return {
     title: "Settings",
     html: `<div class="page-head">
-        <div><h2>Settings</h2><p>Server information, connector key and owner-only controls.</p></div>
+        <div><h2>Settings</h2><p>Server information, connector key, server controls. Settings and shutdown need Admin or Owner.</p></div>
       </div>
 
       <div class="grid cols-2">
@@ -103,11 +105,11 @@ export async function tab(ctx) {
         <h3 class="card-title">Server settings</h3>
         <form id="serverSettingsForm">
           <div class="field-row">
-            <label class="field"><span>Server name</span><input id="setName" value="${esc(server.name)}" maxlength="60" ${isOwner ? "" : "disabled"} /></label>
-            <label class="field"><span>Max players</span><input id="setMax" type="number" min="1" max="1000" value="${server.maxPlayers || 32}" ${isOwner ? "" : "disabled"} /></label>
+            <label class="field"><span>Server name</span><input id="setName" value="${esc(server.name)}" maxlength="60" ${canSettings ? "" : "disabled"} /></label>
+            <label class="field"><span>Max players</span><input id="setMax" type="number" min="1" max="1000" value="${server.maxPlayers || 32}" ${canSettings ? "" : "disabled"} /></label>
           </div>
-          <button class="btn primary" type="submit" ${isOwner ? "" : "disabled"}>Save settings</button>
-          ${!isOwner ? '<span class="role-note" style="margin-left:10px">Owner only.</span>' : ""}
+          <button class="btn primary" type="submit" ${canSettings ? "" : "disabled"}>Save settings</button>
+          ${!canSettings ? '<span class="role-note" style="margin-left:10px">Requires Admin or Owner.</span>' : ""}
         </form>
       </div>
 
@@ -117,7 +119,7 @@ export async function tab(ctx) {
           ${TOGGLES.map(
             (t) => `<div class="settings-row">
               <div class="s-label"><strong>${esc(t.label)}</strong><small>${esc(t.hint)}</small></div>
-              <label class="switch"><input type="checkbox" data-toggle="${t.key}" ${toggleState(t.key) ? "checked" : ""} ${isOwner ? "" : "disabled"} /><span></span></label>
+              <label class="switch"><input type="checkbox" data-toggle="${t.key}" ${toggleState(t.key) ? "checked" : ""} ${canSettings ? "" : "disabled"} /><span></span></label>
             </div>`
           ).join("")}
         </div>
@@ -128,12 +130,13 @@ export async function tab(ctx) {
         <h3 class="card-title" style="color:#ff9a9a">Danger zone</h3>
         <div class="settings-row">
           <div class="s-label"><strong>Restart server (shutdown)</strong><small>MTA has no self-restart. This announces a countdown then shuts the server down; an external supervisor must start it again.</small></div>
-          <button class="btn danger" id="restartBtn" ${isOwner ? "" : "disabled"}>Restart (shutdown)</button>
+          <button class="btn danger" id="restartBtn" ${canShutdown ? "" : "disabled"}>Restart (shutdown)</button>
         </div>
         <div class="settings-row">
           <div class="s-label"><strong>Shut down server</strong><small>Stops the MTA server immediately after a short countdown. Players are disconnected.</small></div>
-          <button class="btn danger" id="shutdownBtn" ${isOwner ? "" : "disabled"}>Shut down</button>
+          <button class="btn danger" id="shutdownBtn" ${canShutdown ? "" : "disabled"}>Shut down</button>
         </div>
+        ${!canShutdown ? '<p class="role-note" style="margin:0">Shutdown requires Admin or Owner.</p>' : ""}
       </div>`,
     onMount(el) {
       bindCopyButtons(el);

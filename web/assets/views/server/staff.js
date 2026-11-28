@@ -5,8 +5,8 @@ const ROLE_MATRIX = [
   ["View panels", "yes", "yes", "yes", "yes"],
   ["Warn, note, mute, freeze, kick", "", "yes", "yes", "yes"],
   ["Say, ban, unban, restart resource", "", "", "yes", "yes"],
-  ["Start/stop resource, settings, shutdown", "", "", "", "yes"],
-  ["Manage staff, rotate key", "", "", "", "yes"],
+  ["Start/stop resource, server settings, shutdown", "", "", "yes", "yes"],
+  ["Manage staff, rotate key, full ACL editor", "", "", "", "yes"],
 ];
 
 function matrixTable() {
