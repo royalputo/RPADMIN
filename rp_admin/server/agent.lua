@@ -298,6 +298,46 @@ poll = function()
 end
 
 -- ---------------------------------------------------------------
+-- Per-resource script issues (errors/warnings since agent start)
+-- ---------------------------------------------------------------
+
+local scriptIssues = {}
+
+function rpAdminRecordScriptIssue(resName, kind, text)
+  if type(resName) ~= "string" or resName == "" then return end
+  local entry = scriptIssues[resName]
+  if not entry then
+    entry = { errors = 0, warns = 0, last = "", lastKind = "warn", at = 0 }
+    scriptIssues[resName] = entry
+  end
+  if kind == "error" then
+    entry.errors = entry.errors + 1
+  else
+    entry.warns = entry.warns + 1
+  end
+  entry.last = string.sub(tostring(text or ""), 1, 200)
+  entry.lastKind = kind == "error" and "error" or "warn"
+  entry.at = getRealTime().timestamp
+
+  -- keep the map bounded: drop the oldest entry beyond 40 resources
+  local count = 0
+  for _ in pairs(scriptIssues) do count = count + 1 end
+  if count > 40 then
+    local oldest, oldestAt = nil, math.huge
+    for name, e in pairs(scriptIssues) do
+      if e.at < oldestAt then oldest, oldestAt = name, e.at end
+    end
+    if oldest then scriptIssues[oldest] = nil end
+  end
+end
+
+function rpAdminClearScriptIssues(resName)
+  if type(resName) == "string" and resName ~= "" then
+    scriptIssues[resName] = nil
+  end
+end
+
+-- ---------------------------------------------------------------
 -- Snapshot
 -- ---------------------------------------------------------------
 
@@ -483,10 +523,24 @@ local function buildSnapshot()
     return "-"
   end, "-")
 
+  local issuesOut = {}
+  for name, entry in pairs(scriptIssues) do
+    issuesOut[#issuesOut + 1] = {
+      name = name,
+      errors = entry.errors,
+      warns = entry.warns,
+      last = entry.last,
+      lastKind = entry.lastKind,
+      at = isoFrom(entry.at),
+    }
+  end
+  table.sort(issuesOut, function(a, b) return a.name < b.name end)
+
   return {
     players = players,
     resources = resources,
     bans = bans,
+    scriptIssues = issuesOut,
     uptime = math.max(0, getRealTime().timestamp - STARTED),
     httpPort = safe(function() return getServerHttpPort() end, 0),
     acl = buildAclSnapshot(),

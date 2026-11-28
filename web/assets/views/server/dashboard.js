@@ -62,7 +62,7 @@ export async function tab(ctx) {
         ${failedResources.length
           ? failedResources.slice(0, 5).map((r) => `<div class="health-issue"><span class="badge danger">${esc(r.state)}</span><span class="grow mono">${esc(r.name)}</span>${can(ctx.role, "resource.restart") ? `<button class="btn sm" data-quick-restart="${esc(r.name)}">Restart</button>` : ""}</div>`).join("")
           : '<p class="muted" style="font-size:12.5px;margin:0 0 10px">All resources are loaded.</p>'}
-        ${issues.slice(0, 4).map((i) => `<div class="health-issue"><span class="badge ${i.kind === "error" ? "danger" : "warn"}">${esc(i.kind)}</span><span class="grow">${esc(i.text)}</span></div>`).join("")}
+        ${issues.slice(0, 4).map((i) => `<div class="health-issue"><span class="badge ${i.kind === "error" ? "danger" : "warn"}">${esc(i.kind)}</span><span class="grow">${i.actor && i.actor !== "server" ? `<span class="mono">${esc(i.actor)}</span> \u2014 ` : ""}${esc(i.text)}</span></div>`).join("")}
         ${!issues.length && failedResources.length ? '<p class="muted" style="font-size:12.5px;margin:8px 0 0">No recent errors or warnings were captured in the last 24 hours.</p>' : ""}
       </div>
 

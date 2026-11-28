@@ -331,6 +331,12 @@ export const mockApi = {
       role,
       players: clone(playersByServer[shortId] || []),
       resources: clone(resourcesByServer[shortId] || []),
+      scriptIssues: String(shortId) === "1"
+        ? [
+            { name: "vehicle-shop", errors: 3, warns: 1, last: "attempt to index a nil value (global 'shopConfig') (server/main.lua:42)", lastKind: "error", at: new Date().toISOString() },
+            { name: "bank-system", errors: 0, warns: 2, last: "deprecated function: getAccountData with root element (server/bank.lua:118)", lastKind: "warn", at: new Date().toISOString() },
+          ]
+        : [],
       acl: clone(aclByServer[shortId] || null),
       diag: { version: "demo", pollStatus: 200, pollCount: 0, lastPollAt: new Date().toISOString(), lastAction: null, lastResult: null, lastUpdate: 200, lastSnapshot: 200, lastError: null },
       bans: clone(bansByServer[shortId] || []),

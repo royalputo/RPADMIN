@@ -24,11 +24,27 @@ export async function tab(ctx) {
   const canStart = canAction(ctx.role, "resource", "start");
   const canStop = canAction(ctx.role, "resource", "stop");
 
+  // Per-resource script errors/warnings captured by the connector.
+  const scriptIssues = {};
+  (ctx.snapshot.scriptIssues || []).forEach((entry) => {
+    scriptIssues[entry.name] = entry;
+  });
+  const issueCount = Object.keys(scriptIssues).length;
+
+  const issueCell = (r) => {
+    const entry = scriptIssues[r.name];
+    if (!entry) return '<span class="muted">-</span>';
+    const total = (entry.errors || 0) + (entry.warns || 0);
+    const tone = entry.errors > 0 ? "danger" : "warn";
+    return `<span class="badge ${tone}" title="${esc(entry.last || "")}">${total} ${entry.errors > 0 ? "error" : "warn"}${total === 1 ? "" : "s"}</span>`;
+  };
+
   const table = dataTable({
     id: "resourcesTable",
     columns: [
       { label: "Resource", mono: true, sortable: true, render: (r) => `<strong>${esc(r.name)}</strong>`, sortValue: (r) => r.name },
       { label: "State", sortable: true, render: (r) => stateBadge(r.state), sortValue: (r) => r.state },
+      { label: "Issues", align: "center", sortable: true, render: issueCell, sortValue: (r) => (scriptIssues[r.name] ? (scriptIssues[r.name].errors || 0) * 1000 + (scriptIssues[r.name].warns || 0) : 0) },
       { label: "Type", sortable: true, render: (r) => esc(r.type || "-") },
       { label: "Author", sortable: true, render: (r) => esc(r.author || "-") },
       { label: "Version", render: (r) => esc(r.version || "-") },
@@ -48,13 +64,27 @@ export async function tab(ctx) {
     ],
     rows: resources,
     empty: "No resources reported by the connector",
-    rowAttrs: (r) => (/fail/i.test(r.state || "") ? 'class="row-error"' : ""),
+    rowAttrs: (r) => {
+      const entry = scriptIssues[r.name];
+      if (/fail/i.test(r.state || "") || (entry && entry.errors > 0)) return 'class="row-error"';
+      if (entry && entry.warns > 0) return 'class="row-warn"';
+      return "";
+    },
   });
 
-  const failedNote = failed.length
-    ? `<div class="banner danger mt-16"><div><strong>${failed.length} script${failed.length === 1 ? "" : "s"} failed.</strong> ${failed
-        .map((r) => `<span class="mono">${esc(r.name)}</span>`)
-        .join(", ")} — check the Activity log for captured errors and restart the resource.</div></div>`
+  const erroredResources = Object.values(scriptIssues).filter((e) => e.errors > 0);
+  const warnedResources = Object.values(scriptIssues).filter((e) => e.errors === 0 && e.warns > 0);
+
+  const failedNote = (failed.length + erroredResources.length)
+    ? `<div class="banner danger mt-16"><div><strong>Script problems detected.</strong> ${
+        [
+          failed.map((r) => `<span class="mono">${esc(r.name)}</span> (failed to load)`),
+          erroredResources.map((e) => `<span class="mono">${esc(e.name)}</span> (${e.errors} error${e.errors === 1 ? "" : "s"})`),
+        ]
+          .filter((parts) => parts.length)
+          .map((parts) => parts.join(", "))
+          .join(" \u00b7 ")
+      } — hover the Issues badge for the last message, check Activity, then Restart the script. Restart clears its counters.</div></div>`
     : "";
 
   const note = !canRestart
@@ -64,7 +94,7 @@ export async function tab(ctx) {
   return {
     title: "Resources",
     html: `<div class="page-head">
-        <div><h2>Resources</h2><p>${running} of ${resources.length} resources running \u00b7 <span class="mono">rp_admin</span>, <span class="mono">admin</span> and <span class="mono">webadmin</span> are skipped by bulk actions.</p></div>
+        <div><h2>Resources</h2><p>${running} of ${resources.length} resources running \u00b7 ${issueCount} script${issueCount === 1 ? "" : "s"} with errors/warnings (captured live from <span class="mono">onDebugMessage</span>, cleared on restart) \u00b7 <span class="mono">rp_admin</span>, <span class="mono">admin</span> and <span class="mono">webadmin</span> are skipped by bulk actions.</p></div>
         <div class="row">
           <button class="btn" id="refreshResourcesBtn" title="Ask MTA to rescan the resources folder">Refresh list</button>
           <button class="btn success" id="startAllBtn" ${canAllStart ? "" : "disabled"}>Start all</button>

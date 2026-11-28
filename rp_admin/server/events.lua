@@ -39,8 +39,11 @@ addEventHandler("onResourceStop", root, function(stopped)
 end)
 
 -- Script errors and warnings (including deprecation warnings) are forwarded
--- without needing logFile access.
-addEventHandler("onDebugMessage", root, function(level, message, file, line)
+-- without needing logFile access. MTA passes:
+-- (message, level, fileId, filename, line, scriptResource) — message FIRST.
+-- The old code read (level, message, ...) so the kind check never matched and
+-- errors were silently dropped.
+addEventHandler("onDebugMessage", root, function(message, level, fileId, filename, line, scriptResource)
   if type(message) ~= "string" then return end
   local kind = nil
   if level == "error" then
@@ -51,8 +54,19 @@ addEventHandler("onDebugMessage", root, function(level, message, file, line)
   if not kind then return end
 
   local text = message
-  if file and file ~= "" then
-    text = text .. " (" .. tostring(file) .. ":" .. tostring(line) .. ")"
+  if filename and filename ~= "" then
+    text = text .. " (" .. tostring(filename) .. ":" .. tostring(line or 0) .. ")"
   end
-  push(kind, "server", string.sub(text, 1, 300))
+
+  -- Remember which script produced it so the Resources tab can highlight it.
+  local resName = ""
+  if isElement(scriptResource) and scriptResource ~= getThisResource() then
+    resName = tostring(getResourceName(scriptResource) or "")
+  end
+  if resName ~= "" and type(rpAdminRecordScriptIssue) == "function" then
+    rpAdminRecordScriptIssue(resName, kind, text)
+  end
+
+  local actor = resName ~= "" and resName or "server"
+  push(kind, actor, string.sub(text, 1, 300))
 end)

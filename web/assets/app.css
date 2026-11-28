@@ -626,6 +626,8 @@ table.tbl tbody tr.selected { background: var(--accent-soft); }
 .health-issue { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 8px; background: var(--bg-soft); margin-bottom: 6px; font-size: 12.5px; }
 .health-issue .grow { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 table.tbl tbody tr.row-error td { background: rgba(239, 68, 68, 0.07); }
+table.tbl tbody tr.row-warn td { background: rgba(245, 158, 11, 0.06); }
+table.tbl td.center, table.tbl th.center { text-align: center; }
 
 /* ---------------- body cam ---------------- */
 .bodycam-stage {

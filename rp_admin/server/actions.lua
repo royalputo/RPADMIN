@@ -165,8 +165,10 @@ handlers["resource"] = function(args)
   else
     return false, nil, "Unknown resource operation"
   end
-  -- Push a fresh snapshot right away so the panel reflects the new state
-  -- immediately instead of waiting for the next 20s snapshot interval.
+  -- A fresh start/restart wipes the highlighted error/warning counters for
+  -- that resource, then pushes a fresh snapshot right away so the panel
+  -- reflects the new state immediately instead of waiting 20s.
+  if type(rpAdminClearScriptIssues) == "function" then rpAdminClearScriptIssues(name) end
   if type(rpAdminQueueSnapshot) == "function" then rpAdminQueueSnapshot(1200) end
   return true, { resource = name, op = op }
 end

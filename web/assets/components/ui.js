@@ -95,7 +95,7 @@ export function dataTable(options) {
   const rows = options.rows || [];
   const head = columns
     .map((col) => {
-      const cls = [col.align === "right" ? "right" : "", col.sortable ? "sortable" : ""].filter(Boolean).join(" ");
+      const cls = [col.align === "right" ? "right" : "", col.align === "center" ? "center" : "", col.sortable ? "sortable" : ""].filter(Boolean).join(" ");
       return `<th class="${cls}" ${col.sortable ? `data-sort-col data-type="${col.type || "text"}"` : ""}>${esc(col.label)}</th>`;
     })
     .join("");
@@ -107,7 +107,7 @@ export function dataTable(options) {
             .map((col) => {
               const raw = col.render ? col.render(row) : row[col.key];
               const sortValue = col.sortValue ? col.sortValue(row) : col.type === "num" ? Number(raw) || 0 : String(raw == null ? "" : raw);
-              const cls = [col.align === "right" ? "right" : "", col.mono ? "mono" : ""].filter(Boolean).join(" ");
+              const cls = [col.align === "right" ? "right" : "", col.align === "center" ? "center" : "", col.mono ? "mono" : ""].filter(Boolean).join(" ");
               return `<td class="${cls}" data-sort="${attr(sortValue)}">${raw == null ? "-" : raw}</td>`;
             })
             .join("");
