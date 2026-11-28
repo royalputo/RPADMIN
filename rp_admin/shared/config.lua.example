@@ -23,11 +23,14 @@ RP_ADMIN = {
   snapshotInterval = 20000,
   eventFlushInterval = 5000,
 
-  -- Absolute path to the MTA server log. When set, new ERROR/WARNING lines are
-  -- forwarded to the panel (Activity + Script health). Windows example:
-  -- "D:/MTA/server/mods/deathmatch/logs/server.log"
+  -- Path to the MTA server log. MUST be an ABSOLUTE path - fileOpen resolves
+  -- relative paths against this resource's own folder, so 'logs/server.log'
+  -- will never find the real log. When set, the tail forwards server-level
+  -- ERROR/WARNING lines (resource-load failures etc.) and backfills the last
+  -- 128 KB on startup. Windows example:
+  --   "D:/MTA/server/mods/deathmatch/logs/server.log"
   -- Linux example: "/home/mta/server/mods/deathmatch/logs/server.log"
-  logFile = "",
+  -- Leave empty to disable the tail.
   logTailInterval = 5000,
 
   -- Forward player chat to the activity log

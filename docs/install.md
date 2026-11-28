@@ -196,18 +196,19 @@ RP_ADMIN = {
 }
 ```
 
-`logFile` is optional — when left empty the connector tails `logs/server.log`
-by default (relative to the `mods/deathmatch` folder; **absolute paths do not
-work**, MTA blocks them). The tail captures server-level problems such as
-"Loading of resource 'X' failed" that never fire `onDebugMessage`, and on
-startup it backfills the last 128 KB so recent problems show up right away:
+`logFile` is optional but recommended — set it to the **absolute** path of the
+server log so server-level problems ("Loading of resource 'X' failed", start
+failures, ...) are captured. It must be absolute: MTA's `fileOpen` resolves
+relative paths against the resource's own folder, so a relative path can never
+find the real log.
 
-- Windows: `logs/server.log`
-- Linux: `logs/server.log`
+- Windows: `D:/MTA/server/mods/deathmatch/logs/server.log`
+- Linux: `/home/mta/server/mods/deathmatch/logs/server.log`
 
-Script errors/warnings themselves are captured automatically through
-`onDebugMessage` — `logFile` only adds extra server-level lines. Set it to a
-non-log path to disable the tail.
+On startup the tail backfills the last 128 KB, so recent problems show up in
+**Script Errors** immediately. Script errors/warnings themselves are captured
+automatically through `onDebugMessage` — `logFile` adds the extra server-level
+lines. Leave it empty to disable the tail.
 
 > `serverUuid` is the database id (not the `/1` panel id). Without it the
 > connector logs "not configured" and stays offline. There is no agent email
