@@ -10,6 +10,14 @@ const TOGGLES = [
   { key: "warnNotify", label: "Notify players on warn", hint: "Send an in-game message when a warning is issued." },
 ];
 
+// Absolute default server-log path per OS (fileOpen is resource-rooted, so
+// relative paths can never reach the real log — see docs/install.md).
+function logFileFor(os) {
+  if (os === "windows") return "C:/MTA/server/mods/deathmatch/logs/server.log";
+  if (os === "linux") return "/home/mta/server/mods/deathmatch/logs/server.log";
+  return "";
+}
+
 function configSnippet(server) {
   return `RP_ADMIN = {
   url = "${CONFIG.PANEL_URL}",
@@ -20,7 +28,8 @@ function configSnippet(server) {
   pollInterval = 3000,
   snapshotInterval = 20000,
   eventFlushInterval = 5000,
-  logFile = "",
+  -- Absolute path to this server's log (adjust if your install path differs)
+  logFile = "${logFileFor(server.os)}",
   logTailInterval = 5000,
   logChat = true,
   showStatusLabel = true,
@@ -107,10 +116,25 @@ export async function tab(ctx) {
           <div class="field-row">
             <label class="field"><span>Server name</span><input id="setName" value="${esc(server.name)}" maxlength="60" ${canSettings ? "" : "disabled"} /></label>
             <label class="field"><span>Max players</span><input id="setMax" type="number" min="1" max="1000" value="${server.maxPlayers || 32}" ${canSettings ? "" : "disabled"} /></label>
+            <label class="field"><span>Operating system</span><select id="setOs" ${isOwner ? "" : "disabled"}>
+              <option value="windows" ${server.os === "windows" ? "selected" : ""}>Windows</option>
+              <option value="linux" ${server.os === "linux" ? "selected" : ""}>Linux</option>
+              <option value="" ${!server.os ? "selected" : ""}>Not sure</option>
+            </select><span class="hint">Prefills the logFile path in the snippet (Owner).</span></label>
           </div>
           <button class="btn primary" type="submit" ${canSettings ? "" : "disabled"}>Save settings</button>
           ${!canSettings ? '<span class="role-note" style="margin-left:10px">Requires Admin or Owner.</span>' : ""}
         </form>
+        <hr class="divider" />
+        <div class="field-label">Server log path (logFile in the snippet)</div>
+        ${server.os
+          ? `<div class="key-reveal">${esc(logFileFor(server.os))}</div>
+             <p class="role-note" style="margin-top:8px">Preset for ${esc(server.os)} — adjust the path in <span class="mono">shared/config.lua</span> if your install directory differs.</p>`
+          : `<div class="notice-list">
+               <div class="member-row"><span class="badge admin">Windows</span><span class="mono grow">C:/MTA/server/mods/deathmatch/logs/server.log</span></div>
+               <div class="member-row"><span class="badge info">Linux</span><span class="mono grow">/home/mta/server/mods/deathmatch/logs/server.log</span></div>
+             </div>
+             <p class="role-note" style="margin-top:8px">Pick the operating system above and re-copy the snippet — it comes prefilled.</p>`}
       </div>
 
       <div class="card mt-16">
@@ -141,12 +165,23 @@ export async function tab(ctx) {
     onMount(el) {
       bindCopyButtons(el);
 
-      el.querySelector("#serverSettingsForm").addEventListener("submit", (ev) => {
+      el.querySelector("#serverSettingsForm").addEventListener("submit", async (ev) => {
         ev.preventDefault();
         const name = el.querySelector("#setName").value.trim();
         const maxPlayers = Number(el.querySelector("#setMax").value) || 0;
         if (!name) return;
         ctx.act("server-settings", { name, maxPlayers });
+
+        const osSelect = el.querySelector("#setOs");
+        if (osSelect && isOwner && (osSelect.value || "") !== (server.os || "")) {
+          const result = await ctx.data.setServerOs(ctx.shortId, osSelect.value || null);
+          if (!result || !result.ok) {
+            ctx.toast((result && result.error) || "Could not save the operating system", "err");
+          } else {
+            server.os = osSelect.value || null;
+            ctx.toast("Operating system saved — re-copy the snippet below", "ok");
+          }
+        }
       });
 
       el.querySelectorAll("[data-toggle]").forEach((input) => {

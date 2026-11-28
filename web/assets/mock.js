@@ -12,6 +12,7 @@ const servers = [
     slug: "royal-freeroam",
     keyHint: "rsk_\u2026 9f3a",
     createdAt: iso(1000 * 60 * 60 * 24 * 34),
+    os: "windows",
     online: true,
     lastSeen: iso(4000),
     playerCount: 10,
@@ -235,6 +236,12 @@ const serverKey = (shortId) => `rsk_${String(shortId).padStart(2, "0")}${Math.ra
 
 const delay = (value, ms) => new Promise((resolve) => setTimeout(() => resolve(value), ms == null ? 140 : ms));
 const clone = (value) => JSON.parse(JSON.stringify(value));
+
+function logFileFor(os) {
+  if (os === "windows") return "C:/MTA/server/mods/deathmatch/logs/server.log";
+  if (os === "linux") return "/home/mta/server/mods/deathmatch/logs/server.log";
+  return "";
+}
 
 function mockAclSkeleton() {
   return {
@@ -660,7 +667,7 @@ export const mockApi = {
     }
   },
 
-  async createServer(name) {
+  async createServer(name, os) {
     if (!name || name.trim().length < 3) return delay({ ok: false, error: "Server name must be at least 3 characters" });
     const shortId = Math.max(...servers.map((s) => s.shortId)) + 1;
     const server = {
@@ -670,6 +677,7 @@ export const mockApi = {
       slug: name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""),
       keyHint: "rsk_\u2026 new",
       createdAt: new Date().toISOString(),
+      os: os || null,
       online: false,
       lastSeen: null,
       playerCount: 0,
@@ -692,7 +700,7 @@ export const mockApi = {
     commandsByServer[shortId] = [];
     membersByServer[shortId] = [{ userId: USER.id, name: USER.displayName, email: USER.email, role: "owner", mtaAccount: null, online: false }];
     const key = serverKey(shortId);
-    return delay({ ok: true, server: clone(server), key, snippet: mockSnippet(shortId, key, server.id) });
+    return delay({ ok: true, server: clone(server), key, snippet: mockSnippet(shortId, key, server.id, os) });
   },
 
   async rotateKey(shortId) {
@@ -702,6 +710,15 @@ export const mockApi = {
     server.keyHint = `rsk_\u2026 ${key.slice(-4)}`;
     pushActivity(shortId, "staff", USER.displayName, `${USER.displayName} rotated the server key`);
     return delay({ ok: true, key });
+  },
+
+  async setServerOs(shortId, os) {
+    const server = findServer(shortId);
+    if (!server) return delay({ ok: false, error: "Server not found" });
+    if (roleFor(shortId) !== "owner") return delay({ ok: false, error: "Owner only" });
+    if (os !== "windows" && os !== "linux") return delay({ ok: false, error: "os must be windows or linux" });
+    server.os = os;
+    return delay({ ok: true, message: `OS set to ${os}` });
   },
 
   async getFrame() {
@@ -800,7 +817,7 @@ export const mockApi = {
   },
 };
 
-export function mockSnippet(shortId, key, serverUuid) {
+export function mockSnippet(shortId, key, serverUuid, os) {
   return `RP_ADMIN = {
   url = "https://rpadmin.mtarg.xyz",
   serverKey = "${key}",
@@ -810,6 +827,9 @@ export function mockSnippet(shortId, key, serverUuid) {
   pollInterval = 3000,
   snapshotInterval = 20000,
   eventFlushInterval = 5000,
+  -- Absolute path to this server's log (adjust if your install path differs)
+  logFile = "${logFileFor(os)}",
+  logTailInterval = 5000,
   logChat = true,
   showStatusLabel = true,
   debug = false,

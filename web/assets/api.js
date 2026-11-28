@@ -130,6 +130,14 @@ function keyHint(key) {
   return `rsk_\u2026 ${key.slice(-4)}`;
 }
 
+// Absolute default server-log path per OS. fileOpen is resource-rooted, so
+// relative paths can never reach the real log — see docs/install.md.
+function logFileFor(os) {
+  if (os === "windows") return "C:/MTA/server/mods/deathmatch/logs/server.log";
+  if (os === "linux") return "/home/mta/server/mods/deathmatch/logs/server.log";
+  return "";
+}
+
 function buildSnippet(server, key) {
   return `RP_ADMIN = {
   url = "${CONFIG.PANEL_URL}",
@@ -140,7 +148,8 @@ function buildSnippet(server, key) {
   pollInterval = 3000,
   snapshotInterval = 20000,
   eventFlushInterval = 5000,
-  logFile = "",
+  -- Absolute path to this server's log (adjust if your install path differs)
+  logFile = "${logFileFor(server.os)}",
   logTailInterval = 5000,
   logChat = true,
   showStatusLabel = true,
@@ -160,6 +169,7 @@ function mapServer(row) {
     slug: row.slug,
     keyHint: row.key_hint,
     createdAt: row.created_at,
+    os: row.os || null,
     online: !!lastSeen && Date.now() - new Date(lastSeen).getTime() <= CONFIG.ONLINE_WINDOW_MS,
     lastSeen,
     playerCount: state.player_count || 0,
@@ -188,7 +198,7 @@ async function resolveServer(shortId) {
   const user = await currentUser();
   if (!user) return null;
   const rows = await rest(
-    `/servers?select=id,short_id,name,slug,key_hint,created_at,server_state(*),server_members!inner(role,user_id)` +
+    `/servers?select=id,short_id,name,slug,key_hint,created_at,os,server_state(*),server_members!inner(role,user_id)` +
       `&short_id=eq.${Number(shortId)}&server_members.user_id=eq.${quote(user.id)}`
   );
   if (!rows.length) return null;
@@ -270,7 +280,7 @@ export const supabaseApi = {
     const user = await currentUser();
     if (!user) return [];
     const rows = await rest(
-      `/servers?select=id,short_id,name,slug,key_hint,created_at,server_state(*),server_members!inner(role,user_id)` +
+      `/servers?select=id,short_id,name,slug,key_hint,created_at,os,server_state(*),server_members!inner(role,user_id)` +
         `&server_members.user_id=eq.${quote(user.id)}&order=short_id.asc`
     );
     return rows.map((row) => {
@@ -463,12 +473,12 @@ export const supabaseApi = {
     }
   },
 
-  async createServer(name) {
+  async createServer(name, os) {
     try {
       const key = makeServerKey();
       const hash = await hashKey(key);
       const hint = keyHint(key);
-      const data = await rpc("create_server", { p_name: name, p_key_hash: hash, p_key_hint: hint });
+      const data = await rpc("create_server", { p_name: name, p_key_hash: hash, p_key_hint: hint, p_os: os || null });
       const row = Array.isArray(data) ? data[0] : data;
       if (!row) return { ok: false, error: "Server creation returned no data" };
       serverCache.clear();
@@ -478,8 +488,21 @@ export const supabaseApi = {
         name: row.name,
         keyHint: row.key_hint,
         createdAt: row.created_at,
+        os: row.os || null,
       };
       return { ok: true, server, key, snippet: buildSnippet(server, key) };
+    } catch (err) {
+      return fail(err);
+    }
+  },
+
+  async setServerOs(shortId, os) {
+    const server = await resolveServer(shortId);
+    if (!server) return { ok: false, error: "Server not found" };
+    try {
+      await rpc("set_server_os", { p_server: server.id, p_os: os });
+      serverCache.delete(String(shortId));
+      return { ok: true, message: `OS set to ${os}` };
     } catch (err) {
       return fail(err);
     }

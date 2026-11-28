@@ -162,6 +162,11 @@ export async function view(ctx) {
           title: "Create a server",
           subtitle: "You will receive a one-time server key and install snippet.",
           body: `<label class="field"><span>Server name</span><input id="newServerName" placeholder="My Royal Server" maxlength="60" /></label>
+                 <label class="field"><span>Operating system</span><select id="newServerOs">
+                   <option value="windows">Windows</option>
+                   <option value="linux">Linux</option>
+                   <option value="">Not sure (skip logFile)</option>
+                 </select><span class="hint">Picks the right logFile path for the connector snippet.</span></label>
                  <div id="createError" class="form-error"></div>`,
           actions: [
             { label: "Cancel", tone: "ghost" },
@@ -170,6 +175,7 @@ export async function view(ctx) {
               tone: "primary",
               async onClick(close) {
                 const name = document.getElementById("newServerName").value.trim();
+                const os = document.getElementById("newServerOs").value;
                 const errorBox = document.getElementById("createError");
                 if (name.length < 3) {
                   errorBox.textContent = "Server name must be at least 3 characters.";
@@ -177,7 +183,7 @@ export async function view(ctx) {
                 }
                 errorBox.textContent = "";
                 try {
-                  const result = await ctx.data.createServer(name);
+                  const result = await ctx.data.createServer(name, os);
                   if (!result || !result.ok) {
                     errorBox.textContent = (result && result.error) || "Could not create server.";
                     return;

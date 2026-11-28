@@ -52,7 +52,8 @@ needed anywhere.
    `supabase/migrations/0007_resources_all.sql`, then
    `supabase/migrations/0008_refresh_commands.sql`, then
    `supabase/migrations/0009_full_acl.sql`, then
-   `supabase/migrations/0010_admin_perms.sql`.
+   `supabase/migrations/0010_admin_perms.sql`, then
+   `supabase/migrations/0011_server_os.sql`.
 
 2. **Local preview** (UI only, demo data):
 
