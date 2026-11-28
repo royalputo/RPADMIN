@@ -243,16 +243,61 @@ export async function view(ctx) {
       }
       tabCleanup = null;
     }
+
+    // Remember the user's place: window scroll, search filters and any inner
+    // scroll containers (log lists). Auto-refresh re-renders every few seconds
+    // and used to bounce the page back to the top and clear searches.
+    const scrollY = window.scrollY;
+    const filters = {};
+    container.querySelectorAll("[data-filter]").forEach((input) => {
+      if (input.value) filters[input.dataset.filter] = input.value;
+    });
+    const innerScrolls = [];
+    container.querySelectorAll("*").forEach((el) => {
+      if (el.scrollTop > 0 && el.scrollHeight > el.clientHeight && el.classList.length) {
+        innerScrolls.push({ cls: el.classList[0], idx: null, top: el.scrollTop });
+      }
+    });
+    innerScrolls.forEach((s) => {
+      s.idx = innerScrolls.filter((o) => o.cls === s.cls).indexOf(s);
+    });
+
     // Swap in a fresh container: cloneNode(false) keeps the id/attrs but drops
     // every listener the previous render bound on it. Reusing the same node
     // used to accumulate handlers on every re-render (the tabs poll every few
-    // seconds), so one click fired dozens of actions.
+    // seconds), so one click fired dozens of actions. The new view is built
+    // off-DOM first and swapped in one step — emptying the container first
+    // collapsed the page height and bounced the scroll to the top.
     const fresh = container.cloneNode(false);
-    container.replaceWith(fresh);
     tabModule = await LOADERS[activeTab]();
     tabResult = await tabModule.tab(tabCtx());
     fresh.innerHTML = tabResult.html;
+    container.replaceWith(fresh);
+
+    // Restore search filters.
+    Object.entries(filters).forEach(([tableId, value]) => {
+      const input = fresh.querySelector(`[data-filter="${tableId}"]`);
+      const table = input ? fresh.querySelector(`#${tableId}`) : null;
+      if (input && table) {
+        input.value = value;
+        const q = value.trim().toLowerCase();
+        Array.from(table.tBodies[0].rows).forEach((row) => {
+          row.style.display = !q || row.textContent.toLowerCase().includes(q) ? "" : "none";
+        });
+      }
+    });
+
+    // Restore inner scroll containers by class + occurrence index.
+    innerScrolls.forEach((s) => {
+      const candidates = [...fresh.getElementsByClassName(s.cls)].filter(
+        (el) => el.scrollHeight > el.clientHeight
+      );
+      const el = candidates[s.idx];
+      if (el) el.scrollTop = s.top;
+    });
+
     if (tabResult.onMount) tabResult.onMount(fresh, tabCtx());
+    if (scrollY) window.scrollTo({ top: scrollY });
   }
 
   const shellHtml = `<div class="app">
