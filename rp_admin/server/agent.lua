@@ -655,15 +655,44 @@ end
 local logPosition = nil
 local tailBackfilled = false
 
+-- The log tail is ON by default: it is the only way to capture server-level
+-- problems (like "Loading of resource 'X' failed") that never fire
+-- onDebugMessage. fileOpen only accepts paths relative to the server's
+-- mods/deathmatch directory, so the default is "logs/server.log".
+local function logFilePath()
+  local path = tostring(CFG.logFile or "")
+  if path == "" then
+    path = "logs/server.log"
+  end
+  return path
+end
+
 local function isLogConfigured()
-  return type(CFG.logFile) == "string"
-    and CFG.logFile ~= ""
-    and not string.find(CFG.logFile, "<", 1, true)
+  return not string.find(logFilePath(), "<", 1, true)
+end
+
+-- Work out which resource a log line belongs to. Handles:
+--   "ERROR: tdma\\Main\\tdma_core.lua:515: ..."   (script error, plain path)
+--   "ERROR: [category]/resname/...:12: ..."       (script error, prefixed)
+--   "... for resource CFL_markersinv"             (resource problem)
+--   "Problem with resource: CFL_markersinv; ..."  (resource problem)
+--   "Loading of resource 'CFL_markersinv' failed" (resource problem)
+local function tailResourceOf(line)
+  local _, resPath = string.match(line, "%[([^%]]*)%][/\\]([^/\\:%s]+)")
+  local resName = string.match(line, "^@([%w_]+)") or resPath
+  if not resName then
+    resName = string.match(line, ": ([%w_]+)[/\\][^:]*:%d+:")
+  end
+  if not resName then
+    resName = string.match(line, "for resource ([%w_]+)")
+      or string.match(line, "resource:? [\"']([%w_]+)")
+  end
+  return resName or ""
 end
 
 local function tailLog()
   if not STATE.enabled or not isLogConfigured() then return end
-  local file = fileOpen(CFG.logFile)
+  local file = fileOpen(logFilePath())
   if not file then return end
 
   local size = fileGetSize(file)
@@ -690,21 +719,30 @@ local function tailLog()
     if pushed >= 20 then break end
     local low = string.lower(line)
     local level = nil
-    if string.find(low, "error", 1, true) or string.find(low, "failed to load", 1, true)
-      or string.find(low, "failed to start", 1, true) then
+    if string.find(low, "error", 1, true) or string.find(low, "failed", 1, true) then
       level = "error"
     elseif string.find(low, "warning", 1, true) then
       level = "warn"
     end
     if level then
-      -- Script-error lines carry a [category]/resname or @resname path and
-      -- already arrive live through onDebugMessage. Record them as per-resource
-      -- counters from the backfill only, and never double-post to the feed.
-      local _, resFromPath = string.match(line, "%[([^%]]*)%][/\\]([^/\\:%s]+)")
-      local resName = string.match(line, "^@([%w_]+)") or resFromPath
-      if resName then
+      local resName = tailResourceOf(line)
+      local isScriptError = string.find(line, ":%d+:%s") ~= nil and resName ~= ""
+        and string.find(low, "%.lua", 1, true) ~= nil
+      if isScriptError then
+        -- Script errors arrive live through onDebugMessage too — record the
+        -- counters from the backfill only, never double-post to the feed.
         if not tailBackfilled and type(rpAdminRecordScriptIssue) == "function" then
           rpAdminRecordScriptIssue(resName, level, string.sub(line, 1, 200))
+        end
+      elseif resName ~= "" then
+        -- Resource-load problems never fire onDebugMessage — the tail is the
+        -- only source. Feed them with the resource as the actor.
+        if type(rpAdminRecordScriptIssue) == "function" then
+          rpAdminRecordScriptIssue(resName, level, string.sub(line, 1, 200))
+        end
+        if type(rpAdminPushActivity) == "function" then
+          rpAdminPushActivity(level, resName, string.sub(line, 1, 300))
+          pushed = pushed + 1
         end
       else
         rpAdminPushActivity(level, "server", string.sub(line, 1, 300))
@@ -868,6 +906,6 @@ addEventHandler("onResourceStart", resourceRoot, function(started)
   if isLogConfigured() then
     setTimer(tailLog, 1000, 1)
     setTimer(tailLog, tonumber(CFG.logTailInterval) or 5000, 0)
-    log("server log tail enabled: " .. tostring(CFG.logFile))
+    log("server log tail enabled: " .. logFilePath() .. (tostring(CFG.logFile or "") == "" and " (default)" or ""))
   end
 end)

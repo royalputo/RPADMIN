@@ -196,17 +196,18 @@ RP_ADMIN = {
 }
 ```
 
-`logFile` is optional: point it at the server log (relative to the
-`mods/deathmatch` folder — **absolute paths do not work**, MTA blocks them) so
-extra server-level ERROR/WARNING lines show up in **Activity**:
+`logFile` is optional — when left empty the connector tails `logs/server.log`
+by default (relative to the `mods/deathmatch` folder; **absolute paths do not
+work**, MTA blocks them). The tail captures server-level problems such as
+"Loading of resource 'X' failed" that never fire `onDebugMessage`, and on
+startup it backfills the last 128 KB so recent problems show up right away:
 
 - Windows: `logs/server.log`
 - Linux: `logs/server.log`
 
 Script errors/warnings themselves are captured automatically through
-`onDebugMessage` — `logFile` only adds extra server-level lines.
-
-Only new lines written after the resource starts are forwarded.
+`onDebugMessage` — `logFile` only adds extra server-level lines. Set it to a
+non-log path to disable the tail.
 
 > `serverUuid` is the database id (not the `/1` panel id). Without it the
 > connector logs "not configured" and stays offline. There is no agent email
