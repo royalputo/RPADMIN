@@ -314,6 +314,7 @@ export const supabaseApi = {
       role: server.role,
       players: (snapshot.players || []).map((p, i) => ({ id: p.serial || `p${i}`, ...p })),
       resources: snapshot.resources || [],
+      scriptIssues: snapshot.scriptIssues || [],
       acl: snapshot.acl || null,
       diag: snapshot.diag || null,
       bans: (snapshot.bans || []).map((b, i) => ({
