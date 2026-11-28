@@ -627,7 +627,6 @@ table.tbl tbody tr.selected { background: var(--accent-soft); }
 .health-issue .grow { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 table.tbl tbody tr.row-error td { background: rgba(239, 68, 68, 0.07); }
 table.tbl tbody tr.row-warn td { background: rgba(245, 158, 11, 0.06); }
-table.tbl td.center, table.tbl th.center { text-align: center; }
 
 /* ---------------- body cam ---------------- */
 .bodycam-stage {
@@ -973,5 +972,59 @@ table.tbl td.center, table.tbl th.center { text-align: center; }
 
 @media (prefers-reduced-motion: reduce) {
   .photo-rain { display: none; }
+  .panel-bg { display: none; }
   .reveal { opacity: 1; transform: none; }
 }
+
+/* ================= main panel background (aurora + floating shots) ================= */
+
+.main { position: relative; z-index: 1; }
+
+.panel-bg {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+  perspective: 1000px;
+}
+.pb-orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(72px);
+  pointer-events: none;
+}
+.pb-orb-1 {
+  width: 520px; height: 520px;
+  right: -140px; top: -160px;
+  background: rgba(79, 124, 255, 0.14);
+  animation: orbFloat 18s ease-in-out infinite;
+}
+.pb-orb-2 {
+  width: 430px; height: 430px;
+  right: 5%; bottom: -190px;
+  background: rgba(109, 91, 255, 0.11);
+  animation: orbFloat 24s ease-in-out infinite reverse;
+}
+/* same .pr machinery, much subtler and slower */
+.pbg { animation-name: pbgFall; }
+@keyframes pbgFall {
+  0%   { transform: translate3d(0, -80px, -300px) rotateZ(-1.5deg); opacity: 0; }
+  10%  { opacity: 0.12; }
+  50%  { transform: translate3d(calc(var(--dx, 40px) * 0.5), 55vh, -60px) rotateZ(1.5deg); opacity: 0.10; }
+  90%  { opacity: 0.08; }
+  100% { transform: translate3d(var(--dx, 40px), 110vh, 120px) rotateZ(-1.5deg); opacity: 0; }
+}
+.pbg img { border-radius: 14px; }
+
+/* ================= script errors tab ================= */
+
+.issue-card.issue-error { border-color: rgba(239, 68, 68, 0.45); }
+.issue-card.issue-warn { border-color: rgba(245, 158, 11, 0.40); }
+.issue-card .card-head { margin-bottom: 12px; }
+
+.nav-item .count.count-alert {
+  background: var(--danger-soft);
+  color: #ff9a9a;
+}
+table.tbl td.center, table.tbl th.center { text-align: center; }

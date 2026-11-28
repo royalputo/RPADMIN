@@ -8,6 +8,7 @@ const TABS = {
   players: { label: "Players", ico: "\u25cf", group: "Management" },
   bodycam: { label: "Body Cam", ico: "\u25c9", group: "Management" },
   resources: { label: "Resources", ico: "\u2699", group: "Management" },
+  errors: { label: "Script Errors", ico: "\u26a1", group: "Management" },
   bans: { label: "Bans", ico: "\u26d4", group: "Management" },
   staff: { label: "Staff", ico: "\u2605", group: "Community" },
   warnings: { label: "Warnings & Notes", ico: "\u26a0", group: "Community" },
@@ -22,6 +23,7 @@ const LOADERS = {
   players: () => import("./server/players.js"),
   bodycam: () => import("./server/bodycam.js"),
   resources: () => import("./server/resources.js"),
+  errors: () => import("./server/errors.js"),
   bans: () => import("./server/bans.js"),
   staff: () => import("./server/staff.js"),
   warnings: () => import("./server/warnings.js"),
@@ -31,7 +33,7 @@ const LOADERS = {
   settings: () => import("./server/settings.js"),
 };
 
-const AUTO_REFRESH = new Set(["dashboard", "players", "resources", "bans", "activity"]);
+const AUTO_REFRESH = new Set(["dashboard", "players", "resources", "errors", "bans", "activity"]);
 
 function sidebar(activeTab, snapshot, user) {
   const groups = [];
@@ -44,9 +46,16 @@ function sidebar(activeTab, snapshot, user) {
       const items = Object.entries(TABS)
         .filter(([, meta]) => meta.group === group)
         .map(([key, meta]) => {
-          const count = key === "players" ? snapshot.players.length : key === "bans" ? snapshot.bans.length : "";
+          let count = "";
+          if (key === "players") count = snapshot.players.length;
+          else if (key === "bans") count = snapshot.bans.length;
+          else if (key === "errors") {
+            count = (snapshot.scriptIssues || []).length;
+            if (!count) count = "";
+          }
+          const countTone = key === "errors" && count !== "" ? " count-alert" : "";
           return `<a class="nav-item ${key === activeTab ? "active" : ""}" href="/${snapshot.server.shortId}/${key}" data-link>
-            <span class="ico">${meta.ico}</span>${esc(meta.label)}${count !== "" ? `<span class="count">${count}</span>` : ""}
+            <span class="ico">${meta.ico}</span>${esc(meta.label)}${count !== "" ? `<span class="count${countTone}">${count}</span>` : ""}
           </a>`;
         })
         .join("");
@@ -116,6 +125,27 @@ function updateTopbar(el, snapshot) {
 function isTyping() {
   const active = document.activeElement;
   return active && /^(INPUT|TEXTAREA|SELECT)$/.test(active.tagName);
+}
+
+// Decorative background behind the whole panel: aurora glow + a few floating
+// panel screenshots (very subtle, behind the cards, hidden for reduced motion).
+const BG_PHOTOS = [
+  { src: "/assets/img/photos/photo-dashboard.svg", x: 78, w: 190, dur: 48, delay: -6, spin: 22 },
+  { src: "/assets/img/photos/photo-players.svg", x: 88, w: 150, dur: 58, delay: -26, spin: 26 },
+  { src: "/assets/img/photos/photo-console.svg", x: 70, w: 130, dur: 52, delay: -40, spin: 20 },
+  { src: "/assets/img/photos/photo-resources.svg", x: 94, w: 170, dur: 64, delay: -14, spin: 24 },
+  { src: "/assets/img/photos/photo-bans.svg", x: 82, w: 140, dur: 70, delay: -50, spin: 28 },
+];
+
+function panelBackground() {
+  const rain = BG_PHOTOS.map((p) => `<div class="pr pbg" style="--x:${p.x}%; --w:${p.w}px; --dur:${p.dur}s; --delay:${p.delay}s; --spin:${p.spin}s; --dx:-40px">
+    <div class="pr-inner"><img src="${p.src}" alt="" loading="lazy" /></div>
+  </div>`).join("");
+  return `<div class="panel-bg" aria-hidden="true">
+    <span class="pb-orb pb-orb-1"></span>
+    <span class="pb-orb pb-orb-2"></span>
+    ${rain}
+  </div>`;
 }
 
 export async function view(ctx) {
@@ -226,6 +256,7 @@ export async function view(ctx) {
   }
 
   const shellHtml = `<div class="app">
+    ${panelBackground()}
     ${sidebar(activeTab, snapshot, userCtx)}
     <main class="main">
       ${topbar(snapshot, activeTab, ctx.data.isMock)}

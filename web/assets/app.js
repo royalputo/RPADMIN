@@ -8,7 +8,7 @@ let data = null;
 let session = null;
 let cleanup = null;
 
-const TABS = ["dashboard", "players", "bodycam", "resources", "bans", "staff", "warnings", "activity", "console", "acl", "settings"];
+const TABS = ["dashboard", "players", "bodycam", "resources", "errors", "bans", "staff", "warnings", "activity", "console", "acl", "settings"];
 
 function parseRoute(pathname) {
   const parts = pathname.replace(/\/+$/, "").split("/").filter(Boolean);

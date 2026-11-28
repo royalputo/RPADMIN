@@ -127,6 +127,8 @@ const notesByServer = {
 
 const activityByServer = {
   1: [
+    { id: 32, kind: "error", actor: "vehicle-shop", text: "attempt to index a nil value (global 'shopConfig') (server/main.lua:42)", createdAt: iso(1000 * 60 * 1) },
+    { id: 31, kind: "warn", actor: "bank-system", text: "deprecated function: getAccountData with root element (server/bank.lua:118)", createdAt: iso(1000 * 60 * 3) },
     { id: 30, kind: "join", actor: "Zed", text: "Zed joined the server", createdAt: iso(1000 * 60 * 2) },
     { id: 29, kind: "join", actor: "Rami", text: "Rami joined the server", createdAt: iso(1000 * 60 * 4) },
     { id: 28, kind: "say", actor: "Royalputo", text: "Welcome to Royal Freeroam! Event starts in 10 minutes.", createdAt: iso(1000 * 60 * 6) },
