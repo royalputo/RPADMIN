@@ -247,7 +247,19 @@ export function openModal(options) {
 
 export function confirmDialog(options) {
   return new Promise((resolve) => {
+    // The first settle wins: openModal fires onClose() inside close(), which
+    // used to resolve(false) BEFORE the confirm action could resolve(true) —
+    // so every confirm dialog silently acted as "Cancel" (deletes and stops
+    // never ran). Settle from the button click first, then close.
+    let settled = false;
+    const settle = (value) => {
+      if (settled) return;
+      settled = true;
+      resolve(value);
+    };
+
     const needsType = typeof options.typeToConfirm === "string" && options.typeToConfirm.length > 0;
+
     openModal({
       title: options.title || "Are you sure?",
       body: `<p class="confirm-text">${esc(options.message || "")}</p>${
@@ -258,7 +270,7 @@ export function confirmDialog(options) {
           : ""
       }`,
       actions: [
-        { label: "Cancel", tone: "ghost", onClick: (close) => { close(); resolve(false); } },
+        { label: "Cancel", tone: "ghost", onClick: (close) => { settle(false); close(); } },
         {
           label: options.confirmLabel || "Confirm",
           tone: options.danger ? "danger" : "primary",
@@ -267,29 +279,29 @@ export function confirmDialog(options) {
               const input = document.getElementById("confirmTypeInput");
               if (!input || input.value.trim() !== options.typeToConfirm) return;
             }
+            settle(true);
             close();
-            resolve(true);
           },
         },
       ],
-      onMount(backdrop) {
+      onMount(backdrop, close) {
         if (!needsType) return;
-        const confirmBtn = backdrop.querySelector("[data-modal-action]:last-of-type") || Array.from(backdrop.querySelectorAll("[data-modal-action]")).pop();
+        const confirmBtn = Array.from(backdrop.querySelectorAll("[data-modal-action]")).pop();
         const input = backdrop.querySelector("#confirmTypeInput");
+        if (!confirmBtn || !input) return;
         const sync = () => {
-          if (confirmBtn) confirmBtn.disabled = !input || input.value.trim() !== options.typeToConfirm;
+          confirmBtn.disabled = input.value.trim() !== options.typeToConfirm;
         };
-        if (input && confirmBtn) {
-          sync();
-          input.addEventListener("input", sync);
-          input.addEventListener("keydown", (ev) => {
-            if (ev.key === "Enter" && input.value.trim() === options.typeToConfirm) {
-              close(); resolve(true);
-            }
-          });
-        }
+        sync();
+        input.addEventListener("input", sync);
+        input.addEventListener("keydown", (ev) => {
+          if (ev.key === "Enter" && input.value.trim() === options.typeToConfirm) {
+            settle(true);
+            close();
+          }
+        });
       },
-      onClose: () => resolve(false),
+      onClose: () => settle(false),
     });
   });
 }
