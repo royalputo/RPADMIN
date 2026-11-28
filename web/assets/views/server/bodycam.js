@@ -4,6 +4,20 @@ import { badge, dataTable, esc, initTables } from "../../components/ui.js";
 export async function tab(ctx) {
   const allow = can(ctx.role, "bodycam");
   const players = ctx.snapshot.players || [];
+  const camStatus = String((ctx.snapshot.diag || {}).bodycamStatus || "");
+
+  // The connector reports why frames are not arriving. "minimized" means the
+  // watched player has their game minimized — MTA cannot capture that and the
+  // cam resumes on its own once they bring the game back.
+  const camBanner = camStatus && camStatus !== "ok"
+    ? `<div class="banner ${camStatus === "minimized" ? "warn" : "danger"}" style="margin-top:16px"><div>
+        ${
+          camStatus === "minimized"
+            ? "<strong>The watched player\u2019s game window is minimized.</strong> MTA cannot capture a minimized game — frames resume automatically once they bring the game back up. Keep the cam running or check again later."
+            : `<strong>Body cam status: ${esc(camStatus)}</strong> — frames are not arriving. The player may have screenshots disabled or left the game.`
+        }
+      </div></div>`
+    : "";
 
   const table = dataTable({
     id: "bodycamPlayers",
@@ -31,6 +45,8 @@ export async function tab(ctx) {
       </div>
 
       ${!allow ? '<div class="banner" style="margin-bottom:16px"><div>Your role cannot use the body cam. Ask an Admin or the Owner.</div></div>' : ""}
+
+      ${camBanner}
 
       <div class="grid cols-2-1">
         <div class="card">

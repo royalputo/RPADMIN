@@ -35,6 +35,12 @@ const LOADERS = {
 
 const AUTO_REFRESH = new Set(["dashboard", "players", "resources", "errors", "bans", "activity"]);
 
+// Auto-refresh tabs re-render at most once per minute — the 5s poll still
+// updates the topbar pills, but a full tab rebuild every 5s was heavy and
+// disruptive.
+const TAB_RENDER_MIN_MS = 60000;
+let lastTabRender = 0;
+
 function sidebar(activeTab, snapshot, user) {
   const groups = [];
   Object.entries(TABS).forEach(([key, meta]) => {
@@ -235,6 +241,7 @@ export async function view(ctx) {
   async function renderTab() {
     const container = root.querySelector("#panel-view");
     if (!container) return;
+    lastTabRender = Date.now();
     if (typeof tabCleanup === "function") {
       try {
         tabCleanup();
@@ -363,7 +370,12 @@ export async function view(ctx) {
           if (!next || next.error) return;
           snapshot = next;
           updateTopbar(root, snapshot);
-          if (AUTO_REFRESH.has(activeTab) && !document.querySelector(".modal-backdrop, .drawer-backdrop") && !isTyping()) {
+          if (
+            AUTO_REFRESH.has(activeTab) &&
+            !document.querySelector(".modal-backdrop, .drawer-backdrop") &&
+            !isTyping() &&
+            Date.now() - lastTabRender >= TAB_RENDER_MIN_MS
+          ) {
             await renderTab();
           }
         } catch {
